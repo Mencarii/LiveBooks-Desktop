@@ -1,5 +1,7 @@
+import { t } from 'fyo';
 import { handleError } from 'src/errorHandling';
 import { fyo } from 'src/initFyo';
+import { showToast } from 'src/utils/interactive';
 import { syncDocumentsToERPNext } from 'src/utils/erpnextSync';
 
 export default function registerIpcRendererListeners() {
@@ -38,6 +40,21 @@ export default function registerIpcRendererListeners() {
     if (fyo.store.isDevelopment) {
       // eslint-disable-next-line no-console
       console.log(...stuff);
+    }
+  });
+
+  ipc.registerLivebooksCloudSessionListener((_, payload: unknown) => {
+    const signedIn =
+      payload !== null &&
+      typeof payload === 'object' &&
+      'signedIn' in payload &&
+      (payload as { signedIn: unknown }).signedIn === true;
+    if (signedIn) {
+      showToast({
+        type: 'success',
+        message: t`LiveBooks Cloud account connected`,
+        duration: 'short',
+      });
     }
   });
 

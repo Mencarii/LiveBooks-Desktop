@@ -877,7 +877,7 @@ async function afterDocSync(
   const clearSyncedDocsFromErpNextSyncQueue = fyo.singles.ERPNextSyncSettings
     ?.clearSyncedDocsFromErpNextSyncQueue as string;
 
-  return await ipc.sendAPIRequest(
+  return await sendAPIRequest(
     `${baseURL}/api/method/books_integration.api.${clearSyncedDocsFromErpNextSyncQueue}`,
     {
       method: 'POST',

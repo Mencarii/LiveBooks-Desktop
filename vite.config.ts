@@ -18,7 +18,16 @@ export default () => {
     host = process.env.VITE_HOST;
   }
 
+  const livebooksCloudOrigin =
+    process.env.VITE_LIVEBOOKS_CLOUD_ORIGIN ||
+    process.env.LIVEBOOKS_CLOUD_ORIGIN ||
+    'http://127.0.0.1:3000';
+
   return defineConfig({
+    define: {
+      'import.meta.env.VITE_LIVEBOOKS_CLOUD_ORIGIN':
+        JSON.stringify(livebooksCloudOrigin),
+    },
     server: { host, port, strictPort: true },
     root: path.resolve(__dirname, './src'),
     plugins: [vue()],

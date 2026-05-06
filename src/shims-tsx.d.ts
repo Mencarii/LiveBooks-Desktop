@@ -1,6 +1,14 @@
 import type { IPC } from 'main/preload';
 import Vue, { VNode } from 'vue';
 
+interface ImportMetaEnv {
+  readonly VITE_LIVEBOOKS_CLOUD_ORIGIN?: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
+
 declare global {
   const ipc: IPC;
   namespace JSX {
