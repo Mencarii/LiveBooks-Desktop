@@ -22,15 +22,6 @@
     "secretlint": "secretlint \"**/*\"",
     "prepare": "husky"
   },
-  "lint-staged": {
-    "*.{ts,vue}": [
-      "eslint --fix --max-warnings 0",
-      "prettier --write"
-    ],
-    "*.{json,md,yml,yaml}": [
-      "prettier --write"
-    ]
-  },
   "dependencies": {
     "@codemirror/autocomplete": "^6.4.2",
     "@codemirror/lang-vue": "^0.1.1",
