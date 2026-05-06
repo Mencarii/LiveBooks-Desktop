@@ -24,6 +24,8 @@ jobs:
 
       - name: Checkout Books
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Dependencies
         run: yarn
@@ -33,3 +35,19 @@ jobs:
 
       - name: Check Formatting
         run: yarn prettier --check .
+
+      - name: Secretlint
+        run: yarn secretlint "**/*"
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Typecheck
+        run: yarn typecheck
+        continue-on-error: true
+
+      - name: Dependency audit
+        run: yarn audit --level moderate
+        continue-on-error: true

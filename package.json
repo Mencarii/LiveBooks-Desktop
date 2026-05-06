@@ -1,10 +1,10 @@
 {
-  "name": "frappe-books",
-  "version": "0.37.0",
-  "description": "Simple book-keeping app for everyone",
+  "name": "livebooks-desktop",
+  "version": "1.0.0",
+  "description": "LiveBooks Desktop — accounting for US small business (Frappe Books fork)",
   "author": {
-    "name": "Frappe Technologies Pvt. Ltd.",
-    "email": "hello@frappe.io"
+    "name": "LiveBooks",
+    "email": "ben.cheng@mencarii.com"
   },
   "scripts": {
     "dev": "node build/scripts/dev.mjs",
@@ -17,7 +17,19 @@
     "test": "scripts/test.sh",
     "uitest": "node uitest/index.mjs | tap-spec",
     "lint": "eslint . --ext ts,vue",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "typecheck": "vue-tsc --noEmit",
+    "secretlint": "secretlint \"**/*\"",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,vue}": [
+      "eslint --fix --max-warnings 0",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.4.2",
@@ -44,6 +56,7 @@
     "@codemirror/view": "^6.0.0",
     "@electron/rebuild": "^3.4.1",
     "@lezer/common": "^1.0.0",
+    "@secretlint/secretlint-rule-preset-recommend": "11.7.1",
     "@types/assert": "^1.5.6",
     "@types/better-sqlite3": "^7.6.4",
     "@types/electron-devtools-installer": "^2.2.0",
@@ -52,6 +65,7 @@
     "@types/node": "^17.0.23",
     "@types/node-fetch": "^2.6.1",
     "@types/tape": "^4.13.2",
+    "@types/webpack-env": "^1.18.8",
     "@typescript-eslint/eslint-plugin": "5.60.0",
     "@typescript-eslint/parser": "5.60.0",
     "@vitejs/plugin-vue": "^4.2.3",
@@ -68,9 +82,12 @@
     "eslint-plugin-vue": "^9.15.0",
     "execa": "^7.1.1",
     "fs-extra": "^11.1.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
     "playwright": "^1.55.1",
     "postcss": "^8",
     "prettier": "^2.4.1",
+    "secretlint": "11.7.1",
     "tailwindcss": "npm:@tailwindcss/postcss7-compat",
     "tailwindcss-rtl": "^0.9.0",
     "tap-spec": "^5.0.0",
@@ -91,9 +108,9 @@
     "singleQuote": true,
     "trailingComma": "es5"
   },
-  "homepage": "https://frappe.io/books",
+  "homepage": "https://mencarii.com",
   "repository": {
-    "url": "https://github.com/frappe/books"
+    "url": "https://github.com/Mencarii/LiveBooks-Desktop"
   },
   "license": "AGPL-3.0-only"
 }

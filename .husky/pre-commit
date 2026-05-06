@@ -1,0 +1,4 @@
+#!/bin/sh
+set -e
+yarn lint-staged
+yarn secretlint "**/*"
