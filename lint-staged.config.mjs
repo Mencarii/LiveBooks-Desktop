@@ -1,11 +1,18 @@
 /**
- * Skip ESLint for *.spec.ts (still ignored by .eslintrc.js); Prettier still runs.
+ * Skip ESLint for paths ignored by .eslintrc.js (spec files, vite.config.ts,
+ * and Vue files under src/components). Prettier still runs.
  */
 export default {
   '*.{ts,vue}': (filenames) => {
-    const eslintTargets = filenames.filter(
-      (f) => !f.endsWith('.spec.ts') && !f.endsWith('vite.config.ts')
-    );
+    const eslintTargets = filenames.filter((f) => {
+      if (f.endsWith('.spec.ts') || f.endsWith('vite.config.ts')) {
+        return false;
+      }
+      if (f.endsWith('.vue') && f.includes('/src/components/')) {
+        return false;
+      }
+      return true;
+    });
     const cmds = [];
     if (eslintTargets.length > 0) {
       cmds.push(
