@@ -1,6 +1,7 @@
 import chokidar from 'chokidar';
 import esbuild from 'esbuild';
 import { $ } from 'execa';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { getMainProcessCommonConfig } from './helpers.mjs';
@@ -31,7 +32,7 @@ let isReload = false;
  */
 let electronProcess = null;
 
-console.log(`running Frappe Books in dev mode\nroot: ${root}`);
+console.log(`running LiveBooks Desktop in dev mode\nroot: ${root}`);
 /**
  * @type {import('execa').ExecaChildProcess<string>}
  */
@@ -86,6 +87,7 @@ if (viteProcess) {
  * Build once and run electron before setting file watcher
  */
 await handleResult(await ctx.rebuild());
+copyCreditsIntoElectronMac();
 electronProcess = runElectron();
 
 /**
@@ -102,6 +104,7 @@ fswatcher.on('change', async (path) => {
   if (electronProcess) {
     isReload = true;
     electronProcess.kill();
+    copyCreditsIntoElectronMac();
     electronProcess = runElectron();
   }
 });
@@ -120,6 +123,39 @@ async function handleResult(result) {
   }
 
   await terminate();
+}
+
+/**
+ * macOS About panel loads `Credits.html` from the *Electron.app* bundle Resources.
+ * Copy our centered credits there in dev so unpackaged runs match production.
+ */
+function copyCreditsIntoElectronMac() {
+  if (process.platform !== 'darwin') {
+    return;
+  }
+
+  const resourcesDir = path.join(
+    root,
+    'node_modules',
+    'electron',
+    'dist',
+    'Electron.app',
+    'Contents',
+    'Resources'
+  );
+  const src = path.join(root, 'build', 'Credits.html');
+  const dest = path.join(resourcesDir, 'Credits.html');
+
+  if (!fs.existsSync(src)) {
+    console.warn(`dev: Credits.html not found at ${src}`);
+    return;
+  }
+  if (!fs.existsSync(resourcesDir)) {
+    console.warn(`dev: Electron Resources not found at ${resourcesDir}`);
+    return;
+  }
+
+  fs.copyFileSync(src, dest);
 }
 
 function runElectron() {

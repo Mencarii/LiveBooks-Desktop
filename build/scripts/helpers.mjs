@@ -9,6 +9,11 @@ import path from 'path';
  * @returns {import('esbuild').BuildOptions}
  */
 export function getMainProcessCommonConfig(root) {
+  const livebooksCloudOrigin =
+    process.env.LIVEBOOKS_CLOUD_ORIGIN ||
+    process.env.VITE_LIVEBOOKS_CLOUD_ORIGIN ||
+    'http://127.0.0.1:3000';
+
   return {
     entryPoints: [
       path.join(root, 'main.ts'),
@@ -21,6 +26,10 @@ export function getMainProcessCommonConfig(root) {
     target: 'node20',
     external: ['knex', 'electron', 'better-sqlite3', 'electron-store'],
     plugins: [excludeVendorFromSourceMap],
+    define: {
+      'process.env.LIVEBOOKS_CLOUD_ORIGIN':
+        JSON.stringify(livebooksCloudOrigin),
+    },
     write: true,
   };
 }

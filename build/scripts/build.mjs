@@ -8,7 +8,7 @@ import * as vite from 'vite';
 import { getMainProcessCommonConfig } from './helpers.mjs';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
-import frappeBooksConfig from '../../electron-builder-config.mjs';
+import liveBooksConfig from '../../electron-builder-config.mjs';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(dirname, '..', '..');
@@ -34,6 +34,7 @@ if (argv.nosign) {
 
 updatePaths();
 await buildMainProcessSource();
+copyPackagedWindowIcon();
 await buildRendererProcessSource();
 copyPackageJson();
 
@@ -62,13 +63,42 @@ async function buildMainProcessSource() {
   }
 }
 
+function copyPackagedWindowIcon() {
+  const appIcon = path.join(root, 'app-icon.png');
+  const fallbackIcon = path.join(root, 'build', 'icon.png');
+  const srcIcon = fs.existsSync(appIcon) ? appIcon : fallbackIcon;
+  const destDir = path.join(buildDirPath, 'icons');
+  fs.ensureDirSync(destDir);
+  if (fs.existsSync(srcIcon)) {
+    fs.copySync(srcIcon, path.join(destDir, '512x512.png'));
+  }
+
+  // Windows: prefer .ico to avoid runtime/OS fallbacks to Electron icon.
+  const icoCandidates = [
+    path.join(root, 'build', 'icon.ico'),
+    path.join(root, 'build', 'installerIcon.ico'),
+  ];
+  const srcIco = icoCandidates.find((p) => fs.existsSync(p));
+  if (srcIco) {
+    fs.copySync(srcIco, path.join(destDir, 'icon.ico'));
+  }
+}
+
 async function buildRendererProcessSource() {
   const base = 'app://';
   const outDir = path.join(buildDirPath, 'src');
+  const livebooksCloudOrigin =
+    process.env.VITE_LIVEBOOKS_CLOUD_ORIGIN ||
+    process.env.LIVEBOOKS_CLOUD_ORIGIN ||
+    'http://127.0.0.1:3000';
   await vite.build({
     base: `/${base}`,
     root: path.join(root, 'src'),
     build: { outDir, sourcemap: true },
+    define: {
+      'import.meta.env.VITE_LIVEBOOKS_CLOUD_ORIGIN':
+        JSON.stringify(livebooksCloudOrigin),
+    },
     plugins: [vue()],
     resolve: {
       alias: {
@@ -155,7 +185,7 @@ async function packageApp() {
   }
 
   let buildOptions = {
-    config: frappeBooksConfig,
+    config: liveBooksConfig,
     ...builderArgs,
   };
 
