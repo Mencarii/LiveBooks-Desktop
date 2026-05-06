@@ -16,6 +16,9 @@ export enum IPC_MESSAGES {
 
 // ipcRenderer.invoke(...)
 export enum IPC_ACTIONS {
+  GET_LIVEBOOKS_CLOUD_SESSION = 'get-livebooks-cloud-session',
+  CLEAR_LIVEBOOKS_CLOUD_SESSION = 'clear-livebooks-cloud-session',
+  LIVEBOOKS_CLOUD_API = 'livebooks-cloud-api',
   GET_OPEN_FILEPATH = 'open-dialog',
   GET_SAVE_FILEPATH = 'save-dialog',
   GET_DIALOG_RESPONSE = 'show-message-box',
@@ -49,6 +52,7 @@ export enum IPC_CHANNELS {
   TRIGGER_ERPNEXT_SYNC = 'trigger-erpnext-sync',
   LOG_MAIN_PROCESS_ERROR = 'main-process-error',
   CONSOLE_LOG = 'console-log',
+  LIVEBOOKS_CLOUD_SESSION_CHANGED = 'livebooks-cloud-session-changed',
 }
 
 export enum DB_CONN_FAILURE {

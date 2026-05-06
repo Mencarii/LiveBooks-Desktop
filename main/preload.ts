@@ -4,7 +4,7 @@ import type {
   SaveDialogOptions,
   SaveDialogReturnValue,
 } from 'electron';
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webFrame } from 'electron';
 import type { ConfigMap } from 'fyo/core/types';
 import config from 'utils/config';
 import type { DatabaseMethod } from 'utils/db/types';
@@ -22,6 +22,10 @@ import type {
 type IPCRendererListener = Parameters<typeof ipcRenderer.on>[1];
 const ipc = {
   desktop: true,
+
+  getZoomFactor() {
+    return webFrame.getZoomFactor();
+  },
 
   reloadWindow() {
     return ipcRenderer.send(IPC_MESSAGES.RELOAD_MAIN_WINDOW);
@@ -208,6 +212,32 @@ const ipc = {
         [key: string]: string | number | boolean | Date | object | object[];
       }[]
     >;
+  },
+
+  async getLivebooksCloudSession() {
+    return (await ipcRenderer.invoke(
+      IPC_ACTIONS.GET_LIVEBOOKS_CLOUD_SESSION
+    )) as { signedIn: boolean };
+  },
+
+  async clearLivebooksCloudSession() {
+    await ipcRenderer.invoke(IPC_ACTIONS.CLEAR_LIVEBOOKS_CLOUD_SESSION);
+  },
+
+  async livebooksCloudApi(payload: {
+    method: string;
+    path: string;
+    body?: unknown;
+    skipAuth?: boolean;
+  }) {
+    return (await ipcRenderer.invoke(
+      IPC_ACTIONS.LIVEBOOKS_CLOUD_API,
+      payload
+    )) as { ok: boolean; status: number; data: unknown };
+  },
+
+  registerLivebooksCloudSessionListener(listener: IPCRendererListener) {
+    ipcRenderer.on(IPC_CHANNELS.LIVEBOOKS_CLOUD_SESSION_CHANGED, listener);
   },
 
   registerMainProcessErrorListener(listener: IPCRendererListener) {

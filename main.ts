@@ -9,21 +9,34 @@ import {
   app,
   BrowserWindow,
   BrowserWindowConstructorOptions,
+  nativeImage,
   protocol,
   ProtocolRequest,
   ProtocolResponse,
 } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import { execFileSync } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import registerAppLifecycleListeners from './main/registerAppLifecycleListeners';
 import registerAutoUpdaterListeners from './main/registerAutoUpdaterListeners';
 import registerIpcMainActionListeners from './main/registerIpcMainActionListeners';
 import registerIpcMainMessageListeners from './main/registerIpcMainMessageListeners';
+import { MAC_DEV_APP_LABEL } from './main/macDevBranding';
 import registerProcessListeners from './main/registerProcessListeners';
+import {
+  attachLivebooksCloudMain,
+  registerLivebooksDeepLinkListeners,
+} from './main/livebooksCloudBridge';
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+  process.exit(0);
+}
 
 export class Main {
-  title = 'Frappe Books';
+  title = 'LiveBooks Desktop';
   icon: string;
 
   winURL = '';
@@ -34,9 +47,8 @@ export class Main {
   HEIGHT = process.platform === 'win32' ? 826 : 800;
 
   constructor() {
-    this.icon = this.isDevelopment
-      ? path.resolve('./build/icon.png')
-      : path.join(__dirname, 'icons', '512x512.png');
+    attachLivebooksCloudMain(this);
+    this.icon = this.resolveWindowIcon();
 
     protocol.registerSchemesAsPrivileged([
       { scheme: 'app', privileges: { secure: true, standard: true } },
@@ -44,6 +56,8 @@ export class Main {
 
     if (this.isDevelopment) {
       autoUpdater.logger = console;
+      app.setName(MAC_DEV_APP_LABEL);
+      this.title = MAC_DEV_APP_LABEL;
     }
 
     // https://github.com/electron-userland/electron-builder/issues/4987
@@ -54,8 +68,102 @@ export class Main {
     };
 
     this.registerListeners();
-    if (this.isMac && this.isDevelopment) {
-      app.dock.setIcon(this.icon);
+  }
+
+  resolveWindowIcon(): string {
+    // In production we ship a small set of icon assets alongside the main bundle.
+    // Prefer platform-native formats where possible to avoid OS fallbacks.
+    if (!this.isDevelopment) {
+      const packagedCandidates =
+        process.platform === 'win32'
+          ? [path.join(__dirname, 'icons', 'icon.ico')]
+          : [path.join(__dirname, 'icons', '512x512.png')];
+
+      const packaged = packagedCandidates.find((p) => fs.existsSync(p));
+      if (packaged) {
+        return packaged;
+      }
+    }
+
+    // Dev / fallback paths (project root)
+    if (process.platform === 'win32') {
+      const ico = path.join(__dirname, '..', '..', 'build', 'icon.ico');
+      if (fs.existsSync(ico)) {
+        return ico;
+      }
+    }
+
+    const appIcon = path.join(__dirname, '..', '..', 'app-icon.png');
+    if (fs.existsSync(appIcon)) {
+      return appIcon;
+    }
+
+    return path.join(__dirname, '..', '..', 'build', 'icon.png');
+  }
+
+  /**
+   * macOS: set Dock icon as early as possible when creating a window.
+   * Packaged apps ship `Contents/Resources/icon.icns` (see electron-builder);
+   * dev runs use repo `LiveBooks.icns` / PNG fallbacks.
+   */
+  setMacDockIcon(): void {
+    if (!this.isMac || !app.dock) {
+      return;
+    }
+
+    if (app.isPackaged) {
+      const bundledIcns = path.join(process.resourcesPath, 'icon.icns');
+      if (fs.existsSync(bundledIcns)) {
+        try {
+          app.dock.setIcon(path.resolve(bundledIcns));
+          return;
+        } catch {
+          /* fall through */
+        }
+      }
+    }
+
+    const projectRoot = path.resolve(path.join(__dirname, '..', '..'));
+    const icnsCandidates = [
+      path.join(projectRoot, 'LiveBooks.icns'),
+      path.join(projectRoot, 'build', 'LiveBooks.icns'),
+    ];
+    const icns = icnsCandidates.find((p) => fs.existsSync(p));
+
+    if (icns) {
+      const icnsAbs = path.resolve(icns);
+      try {
+        app.dock.setIcon(icnsAbs);
+        return;
+      } catch {
+        const rasterPath = rasterizeIcnsToTempPng(icnsAbs);
+        if (rasterPath) {
+          try {
+            const img = nativeImage.createFromPath(rasterPath);
+            if (!img.isEmpty()) {
+              app.dock.setIcon(img);
+              return;
+            }
+          } catch {
+            /* fall through */
+          } finally {
+            try {
+              fs.unlinkSync(rasterPath);
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      }
+    }
+
+    try {
+      const img = nativeImage.createFromPath(path.resolve(this.icon));
+      if (!img.isEmpty()) {
+        app.dock.setIcon(img);
+      }
+    } catch {
+      /* ignore */
     }
   }
 
@@ -76,6 +184,7 @@ export class Main {
   }
 
   registerListeners() {
+    registerLivebooksDeepLinkListeners();
     registerIpcMainMessageListeners(this);
     registerIpcMainActionListeners(this);
     registerAutoUpdaterListeners(this);
@@ -91,6 +200,8 @@ export class Main {
       title: this.title,
       titleBarStyle: 'hidden',
       trafficLightPosition: { x: 16, y: 16 },
+      /** Avoid a visible window (and taskbar/dock tile) before icon + first paint. */
+      show: false,
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
@@ -102,20 +213,17 @@ export class Main {
       resizable: true,
     };
 
-    if (this.isDevelopment || this.isLinux) {
-      Object.assign(options, { icon: this.icon });
-    }
-
-    if (this.isLinux) {
-      Object.assign(options, {
-        icon: path.join(__dirname, '/icons/512x512.png'),
-      });
-    }
+    // Always set explicitly so Windows/Linux never fall back to Electron's default.
+    Object.assign(options, { icon: this.icon });
 
     return options;
   }
 
   async createWindow() {
+    if (this.isMac) {
+      this.setMacDockIcon();
+    }
+
     const options = this.getOptions();
     this.mainWindow = new BrowserWindow(options);
 
@@ -125,12 +233,16 @@ export class Main {
       this.registerAppProtocol();
     }
 
+    this.setMainWindowListeners();
+
+    this.mainWindow.once('ready-to-show', () => {
+      this.mainWindow?.show();
+    });
+
     await this.mainWindow.loadURL(this.winURL);
     if (this.isDevelopment && !this.isTest) {
       this.mainWindow.webContents.openDevTools();
     }
-
-    this.setMainWindowListeners();
   }
 
   setViteServerURL() {
@@ -167,6 +279,21 @@ export class Main {
         emitMainProcessError(err)
       );
     });
+  }
+}
+
+function rasterizeIcnsToTempPng(icnsPath: string): string | null {
+  const out = path.join(os.tmpdir(), `livebooks-dock-${process.pid}.png`);
+  try {
+    if (fs.existsSync(out)) {
+      fs.unlinkSync(out);
+    }
+    execFileSync('sips', ['-s', 'format', 'png', icnsPath, '--out', out], {
+      stdio: 'ignore',
+    });
+    return fs.existsSync(out) ? out : null;
+  } catch {
+    return null;
   }
 }
 

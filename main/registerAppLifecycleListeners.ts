@@ -1,8 +1,16 @@
 import { app } from 'electron';
 import installExtension, { VUEJS3_DEVTOOLS } from 'electron-devtools-installer';
 import { Main } from '../main';
-import { rendererLog } from './helpers';
 import { emitMainProcessError } from 'backend/helpers';
+import { configureMacAboutPanel } from './configureMacAboutPanel';
+import { rendererLog } from './helpers';
+import {
+  consumeArgvLivebooksDeepLink,
+  flushPendingLivebooksDeepLink,
+  registerLivebooksDefaultProtocol,
+  startLivebooksDevHandoffServer,
+} from './livebooksCloudBridge';
+import { configureMacDevelopmentShell } from './setupMacDevelopmentShell';
 
 export default function registerAppLifecycleListeners(main: Main) {
   app.on('window-all-closed', () => {
@@ -18,11 +26,29 @@ export default function registerAppLifecycleListeners(main: Main) {
   });
 
   app.on('ready', () => {
-    if (main.isDevelopment && !main.isTest) {
+    if (process.platform === 'win32') {
+      app.setAppUserModelId('io.livebooks.desktop');
+    }
+
+    registerLivebooksDefaultProtocol();
+    startLivebooksDevHandoffServer();
+
+    if (process.platform === 'darwin') {
+      configureMacAboutPanel(main.icon, main.isDevelopment);
+      configureMacDevelopmentShell();
+    }
+
+    if (main.isDevelopment) {
       installDevTools(main).catch((err) => emitMainProcessError(err));
     }
 
-    main.createWindow().catch((err) => emitMainProcessError(err));
+    main
+      .createWindow()
+      .then(() => {
+        consumeArgvLivebooksDeepLink();
+        flushPendingLivebooksDeepLink();
+      })
+      .catch((err) => emitMainProcessError(err));
   });
 }
 

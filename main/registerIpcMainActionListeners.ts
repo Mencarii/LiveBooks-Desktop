@@ -6,15 +6,23 @@ import {
   dialog,
   ipcMain,
 } from 'electron';
+import fetch from 'node-fetch';
 import { autoUpdater } from 'electron-updater';
 import { constants } from 'fs';
 import fs from 'fs-extra';
 import path from 'path';
+import config from 'utils/config';
 import { SelectFileOptions, SelectFileReturn } from 'utils/types';
 import databaseManager from '../backend/database/manager';
 import { emitMainProcessError } from '../backend/helpers';
 import { Main } from '../main';
 import { DatabaseMethod } from '../utils/db/types';
+import {
+  broadcastLivebooksCloudSession,
+  clearLivebooksCloudSessionFromStore,
+  getLivebooksCloudOriginMain,
+  isLivebooksCloudSignedIn,
+} from './livebooksCloudBridge';
 import { IPC_ACTIONS } from '../utils/messages';
 import { getUrlAndTokenString, sendError } from './contactMothership';
 import { getLanguageMap } from './getLanguageMap';
@@ -254,7 +262,81 @@ export default function registerIpcMainActionListeners(main: Main) {
   ipcMain.handle(
     IPC_ACTIONS.SEND_API_REQUEST,
     async (e, endpoint: string, options: RequestInit | undefined) => {
-      return sendAPIRequest(endpoint, options);
+      return sendAPIRequest(endpoint, options, app.isPackaged);
+    }
+  );
+
+  ipcMain.handle(IPC_ACTIONS.GET_LIVEBOOKS_CLOUD_SESSION, () => {
+    return { signedIn: isLivebooksCloudSignedIn() };
+  });
+
+  ipcMain.handle(IPC_ACTIONS.CLEAR_LIVEBOOKS_CLOUD_SESSION, async () => {
+    const origin = getLivebooksCloudOriginMain();
+    const refresh = config.get('livebooksCloudRefreshToken');
+    if (typeof refresh === 'string' && refresh.length > 0) {
+      try {
+        await fetch(`${origin}/api/v1/sessions`, {
+          method: 'DELETE',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ refresh_token: refresh }),
+        });
+      } catch {
+        /* still clear local session */
+      }
+    }
+    clearLivebooksCloudSessionFromStore();
+    broadcastLivebooksCloudSession(main, false);
+  });
+
+  ipcMain.handle(
+    IPC_ACTIONS.LIVEBOOKS_CLOUD_API,
+    async (
+      _,
+      payload: {
+        method: string;
+        path: string;
+        body?: unknown;
+        skipAuth?: boolean;
+      }
+    ) => {
+      const { method, path, body, skipAuth } = payload;
+      if (!path.startsWith('/api/')) {
+        return { ok: false, status: 0, error: 'invalid_path' as const };
+      }
+
+      const origin = getLivebooksCloudOriginMain();
+      const access = skipAuth
+        ? undefined
+        : config.get('livebooksCloudAccessToken');
+
+      const headers: Record<string, string> = {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      };
+      if (!skipAuth && typeof access === 'string' && access.length > 0) {
+        headers.Authorization = `Bearer ${access}`;
+      }
+
+      const init: RequestInit = {
+        method,
+        headers,
+      };
+      if (body !== undefined && method !== 'GET' && method !== 'HEAD') {
+        init.body = JSON.stringify(body);
+      }
+
+      const res = await fetch(`${origin}${path}`, init);
+      const text = await res.text();
+      let data: unknown = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = { raw: text };
+      }
+      return { ok: res.ok, status: res.status, data };
     }
   );
 
