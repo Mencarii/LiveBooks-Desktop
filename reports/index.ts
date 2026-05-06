@@ -1,3 +1,5 @@
+import { AccountsPayableAging } from './Aging/AccountsPayableAging';
+import { AccountsReceivableAging } from './Aging/AccountsReceivableAging';
 import { BalanceSheet } from './BalanceSheet/BalanceSheet';
 import { GeneralLedger } from './GeneralLedger/GeneralLedger';
 import { GSTR1 } from './GoodsAndServiceTax/GSTR1';
@@ -12,6 +14,8 @@ export const reports = {
   ProfitAndLoss,
   BalanceSheet,
   TrialBalance,
+  AccountsReceivableAging,
+  AccountsPayableAging,
   GSTR1,
   GSTR2,
   StockLedger,
