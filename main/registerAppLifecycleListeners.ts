@@ -6,6 +6,7 @@ import { configureMacAboutPanel } from './configureMacAboutPanel';
 import { rendererLog } from './helpers';
 import {
   consumeArgvLivebooksDeepLink,
+  flushPendingCloudSessionBroadcast,
   flushPendingLivebooksDeepLink,
   registerLivebooksDefaultProtocol,
   startLivebooksDevHandoffServer,
@@ -34,8 +35,8 @@ export default function registerAppLifecycleListeners(main: Main) {
     startLivebooksDevHandoffServer();
 
     if (process.platform === 'darwin') {
-      configureMacAboutPanel(main.icon, main.isDevelopment);
-      configureMacDevelopmentShell();
+      configureMacAboutPanel(main.icon, main.appEnv);
+      configureMacDevelopmentShell(main.appEnv);
     }
 
     if (main.isDevelopment) {
@@ -47,6 +48,7 @@ export default function registerAppLifecycleListeners(main: Main) {
       .then(() => {
         consumeArgvLivebooksDeepLink();
         flushPendingLivebooksDeepLink();
+        flushPendingCloudSessionBroadcast();
       })
       .catch((err) => emitMainProcessError(err));
   });

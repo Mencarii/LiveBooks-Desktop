@@ -6,6 +6,9 @@ import { Creds } from 'utils/types';
 import { rendererLog } from './helpers';
 import type { Main } from 'main';
 
+/** Avoid spamming the terminal when many errors call getUrlAndTokenString in dev. */
+let warnedMissingRemoteLogCreds = false;
+
 export function getUrlAndTokenString(): Creds {
   const inProduction = app.isPackaged;
   const empty: Creds = { errorLogUrl: '', telemetryUrl: '', tokenString: '' };
@@ -18,8 +21,13 @@ export function getUrlAndTokenString(): Creds {
   }
 
   if (!fs.existsSync(errLogCredsPath)) {
-    // eslint-disable-next-line no-console
-    !inProduction && console.log(`${errLogCredsPath} doesn't exist, can't log`);
+    if (!inProduction && !warnedMissingRemoteLogCreds) {
+      warnedMissingRemoteLogCreds = true;
+      // eslint-disable-next-line no-console
+      console.log(
+        `${errLogCredsPath} is missing; remote error/telemetry logging is disabled (expected in local dev).`
+      );
+    }
     return empty;
   }
 
@@ -48,6 +56,10 @@ export function getUrlAndTokenString(): Creds {
 
 export async function sendError(body: string, main: Main) {
   const { errorLogUrl, tokenString } = getUrlAndTokenString();
+  if (!errorLogUrl || !tokenString) {
+    return;
+  }
+
   const headers = {
     Authorization: tokenString,
     Accept: 'application/json',

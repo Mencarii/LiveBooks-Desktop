@@ -1,19 +1,25 @@
 import { Menu, MenuItemConstructorOptions, shell } from 'electron';
-import { MAC_DEV_APP_LABEL } from './macDevBranding';
+import type { LivebooksAppEnv } from 'utils/livebooksAppEnv';
+import { macShellAppLabel } from './macDevBranding';
 
 /**
  * Unpackaged Electron on macOS uses the host bundle name for the default app menu.
  * Replacing the application menu fixes standard items; the menu bar title may still
  * read "Electron" until a packaged .app is used. About panel is set in configureMacAboutPanel.
  */
-export function configureMacDevelopmentShell(): void {
-  Menu.setApplicationMenu(Menu.buildFromTemplate(buildMacDevMenuTemplate()));
+export function configureMacDevelopmentShell(appEnv: LivebooksAppEnv): void {
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate(buildMacDevMenuTemplate(appEnv))
+  );
 }
 
-function buildMacDevMenuTemplate(): MenuItemConstructorOptions[] {
+function buildMacDevMenuTemplate(
+  appEnv: LivebooksAppEnv
+): MenuItemConstructorOptions[] {
+  const appLabel = macShellAppLabel(appEnv);
   return [
     {
-      label: MAC_DEV_APP_LABEL,
+      label: appLabel,
       submenu: [
         { role: 'about' },
         { type: 'separator' },

@@ -1,7 +1,8 @@
 import { app } from 'electron';
 import fs from 'fs';
+import type { LivebooksAppEnv } from 'utils/livebooksAppEnv';
+import { livebooksDesktopDisplayName } from 'utils/livebooksAppEnv';
 import { getDisplayAppVersion, getSemverWithoutVPrefix } from './appVersion';
-import { MAC_DEV_APP_LABEL } from './macDevBranding';
 
 /**
  * macOS About window for packaged and dev builds.
@@ -11,11 +12,9 @@ import { MAC_DEV_APP_LABEL } from './macDevBranding';
  */
 export function configureMacAboutPanel(
   iconPath: string,
-  isDevelopment: boolean
+  appEnv: LivebooksAppEnv
 ): void {
-  const applicationName = isDevelopment
-    ? MAC_DEV_APP_LABEL
-    : 'LiveBooks Desktop';
+  const applicationName = livebooksDesktopDisplayName(appEnv);
 
   const about: Parameters<typeof app.setAboutPanelOptions>[0] = {
     applicationName,
