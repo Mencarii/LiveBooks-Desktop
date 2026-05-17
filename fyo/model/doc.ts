@@ -775,7 +775,7 @@ export class Doc extends Observable<DocValue | Doc[]> {
       throw new ConflictError(
         this.fyo
           .t`${this.schema.label} ${this.name} has been modified after loading please reload entry.` +
-        ` ${dbModified}, ${docModified}`
+          ` ${dbModified}, ${docModified}`
       );
     }
   }
@@ -1145,18 +1145,18 @@ export class Doc extends Observable<DocValue | Doc[]> {
    */
 
   /* eslint-disable @typescript-eslint/no-empty-function, @typescript-eslint/no-unused-vars */
-  async change(ch: ChangeArg) { }
-  async validate() { }
-  async beforeSync() { }
-  async afterSync() { }
-  async beforeSubmit() { }
-  async afterSubmit() { }
-  async beforeRename() { }
-  async afterRename() { }
-  async beforeCancel() { }
-  async afterCancel() { }
-  async beforeDelete() { }
-  async afterDelete() { }
+  async change(ch: ChangeArg) {}
+  async validate() {}
+  async beforeSync() {}
+  async afterSync() {}
+  async beforeSubmit() {}
+  async afterSubmit() {}
+  async beforeRename() {}
+  async afterRename() {}
+  async beforeCancel() {}
+  async afterCancel() {}
+  async beforeDelete() {}
+  async afterDelete() {}
 
   formulas: FormulaMap = {};
   validations: ValidationMap = {};

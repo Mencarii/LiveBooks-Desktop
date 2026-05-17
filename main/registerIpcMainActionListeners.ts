@@ -903,8 +903,8 @@ export default function registerIpcMainActionListeners(main: Main) {
 
       const escrowedAt =
         data &&
-          typeof data === 'object' &&
-          typeof (data as { escrowed_at?: unknown }).escrowed_at === 'string'
+        typeof data === 'object' &&
+        typeof (data as { escrowed_at?: unknown }).escrowed_at === 'string'
           ? (data as { escrowed_at: string }).escrowed_at
           : new Date().toISOString();
 
@@ -1040,8 +1040,8 @@ export default function registerIpcMainActionListeners(main: Main) {
         typeof obj.user_id === 'string'
           ? obj.user_id
           : typeof obj.user_id === 'number'
-            ? String(obj.user_id)
-            : null;
+          ? String(obj.user_id)
+          : null;
 
       if (!recoveredKey || !isHexDatabaseKey64(recoveredKey)) {
         return {

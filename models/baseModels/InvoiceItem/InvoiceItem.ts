@@ -621,8 +621,9 @@ export abstract class InvoiceItem extends Doc {
       }
 
       throw new ValidationError(
-        this.fyo.t`Discount Percent (${value as number
-          }) cannot be greater than 100.`
+        this.fyo.t`Discount Percent (${
+          value as number
+        }) cannot be greater than 100.`
       );
     },
     transferUnit: async (value: DocValue) => {
@@ -641,8 +642,9 @@ export abstract class InvoiceItem extends Doc {
 
       if (item.length < 1) {
         throw new ValidationError(
-          t`Transfer Unit ${value as string} is not applicable for Item ${this.item
-            }`
+          t`Transfer Unit ${value as string} is not applicable for Item ${
+            this.item
+          }`
         );
       }
     },

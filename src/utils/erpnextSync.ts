@@ -846,7 +846,8 @@ async function getDocsFromERPNext(
     fyo.singles.ERPNextSyncSettings?.fetchFromERPNextQueue;
 
   return (await sendAPIRequest(
-    `${baseURL}/api/method/books_integration.api.${fetchFromERPNextQueue as string
+    `${baseURL}/api/method/books_integration.api.${
+      fetchFromERPNextQueue as string
     }?instance=${deviceID}`,
     {
       headers: {

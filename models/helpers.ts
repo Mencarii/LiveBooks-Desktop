@@ -1165,11 +1165,12 @@ export async function validateQty(
     if (
       (existingItems && !itemQtyMap[itemName]) ||
       itemQtyMap[itemName][item.batch as string] <
-      (existingItems[0]?.quantity as number)
+        (existingItems[0]?.quantity as number)
     ) {
       throw new ValidationError(
-        t`Item ${itemName} only has ${itemQtyMap[itemName][item.batch as string]
-          } Quantity in batch ${item.batch as string}`
+        t`Item ${itemName} only has ${
+          itemQtyMap[itemName][item.batch as string]
+        } Quantity in batch ${item.batch as string}`
       );
     }
   } else {
@@ -1602,8 +1603,9 @@ export async function validateCouponCode(
     !(coupon[0].minAmount as Money).isZero()
   ) {
     throw new ValidationError(
-      t`The Grand Total must exceed ${(coupon[0].minAmount as Money).float
-        } to apply the coupon ${value}.`
+      t`The Grand Total must exceed ${
+        (coupon[0].minAmount as Money).float
+      } to apply the coupon ${value}.`
     );
   }
 
@@ -1612,8 +1614,9 @@ export async function validateCouponCode(
     !(coupon[0].maxAmount as Money).isZero()
   ) {
     throw new ValidationError(
-      t`The Grand Total must be less than ${(coupon[0].maxAmount as Money).float
-        } to apply this coupon.`
+      t`The Grand Total must be less than ${
+        (coupon[0].maxAmount as Money).float
+      } to apply this coupon.`
     );
   }
 
@@ -1642,7 +1645,7 @@ export async function validateLoyaltyProgram(
   if (
     (loyaltyProgram[0]?.maximumUse as number) > 0 &&
     (loyaltyProgram[0]?.used as number) >=
-    (loyaltyProgram[0]?.maximumUse as number)
+      (loyaltyProgram[0]?.maximumUse as number)
   ) {
     return;
   }
