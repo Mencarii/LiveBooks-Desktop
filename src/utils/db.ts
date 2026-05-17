@@ -9,12 +9,31 @@ type Conn = {
 export const dbErrorActionSymbols = {
   SelectFile: Symbol('select-file'),
   CancelSelection: Symbol('cancel-selection'),
+  RecoveryRequired: Symbol('recovery-required'),
 } as const;
 
 const dbErrors = {
   DirectoryDoesNotExist: 'directory does not exist',
   UnableToAcquireConnection: 'Unable to acquire a connection',
 } as const;
+
+const KEYCHAIN_ERROR_CODES = new Set([
+  'KEYCHAIN_CORRUPTED',
+  'KEYCHAIN_UNAVAILABLE',
+]);
+
+function getErrorCode(error: Error): string | undefined {
+  const code = (error as Error & { code?: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
+}
+
+export function isKeychainRecoveryError(error: Error): boolean {
+  const code = getErrorCode(error);
+  if (code && KEYCHAIN_ERROR_CODES.has(code)) {
+    return true;
+  }
+  return error.message?.includes('KEYCHAIN_CORRUPTED') ?? false;
+}
 
 export async function connectToDatabase(
   fyo: Fyo,
@@ -40,6 +59,19 @@ export async function handleDatabaseConnectionError(
   error: Error,
   dbPath: string
 ) {
+  // Day-1 Phase 0.1 / 0.3: keychain failures must route to /recovery.
+  // We MUST NOT silently re-key the encrypted .db (the legacy
+  // `getOrCreateDatabaseKey` bug); that is what bricks customer data.
+  if (isKeychainRecoveryError(error)) {
+    try {
+      sessionStorage.setItem('recoveryDbPath', dbPath);
+    } catch {
+      // sessionStorage may be unavailable in some test harnesses; the
+      // recovery page falls back to fyo.config.lastSelectedFilePath.
+    }
+    return dbErrorActionSymbols.RecoveryRequired;
+  }
+
   const message = error.message;
   if (typeof message !== 'string') {
     throw error;

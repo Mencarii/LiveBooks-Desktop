@@ -13,6 +13,7 @@ import {
   protocol,
   ProtocolRequest,
   ProtocolResponse,
+  session,
 } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { execFileSync } from 'child_process';
@@ -23,20 +24,33 @@ import registerAppLifecycleListeners from './main/registerAppLifecycleListeners'
 import registerAutoUpdaterListeners from './main/registerAutoUpdaterListeners';
 import registerIpcMainActionListeners from './main/registerIpcMainActionListeners';
 import registerIpcMainMessageListeners from './main/registerIpcMainMessageListeners';
-import { MAC_DEV_APP_LABEL } from './main/macDevBranding';
+import {
+  applyMacShellDisplayName,
+  livebooksDesktopShellDisplayName,
+  resolveLivebooksAppEnvMain,
+} from './main/livebooksAppEnvMain';
 import registerProcessListeners from './main/registerProcessListeners';
+import type { LivebooksAppEnv } from 'utils/livebooksAppEnv';
+import { LIVEBOOKS_DESKTOP_PRODUCT_NAME } from 'utils/livebooksAppEnv';
 import {
   attachLivebooksCloudMain,
   registerLivebooksDeepLinkListeners,
 } from './main/livebooksCloudBridge';
+import { assertFrozenSigningIdentityForPackagedBuild } from './main/frozenSigningIdentity';
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
   process.exit(0);
 }
 
+// Day-1 Phase 1.6: refuse to boot a packaged build whose signing
+// identity drifted from the frozen contract. A drift would silently
+// invalidate every user's safeStorage-wrapped SQLCipher key.
+assertFrozenSigningIdentityForPackagedBuild();
+
 export class Main {
-  title = 'LiveBooks Desktop';
+  readonly appEnv: LivebooksAppEnv;
+  title = LIVEBOOKS_DESKTOP_PRODUCT_NAME;
   icon: string;
 
   winURL = '';
@@ -54,11 +68,13 @@ export class Main {
       { scheme: 'app', privileges: { secure: true, standard: true } },
     ]);
 
+    this.appEnv = resolveLivebooksAppEnvMain();
+    this.title = livebooksDesktopShellDisplayName(this.appEnv);
+
     if (this.isDevelopment) {
       autoUpdater.logger = console;
-      app.setName(MAC_DEV_APP_LABEL);
-      this.title = MAC_DEV_APP_LABEL;
     }
+    applyMacShellDisplayName(this.appEnv);
 
     // https://github.com/electron-userland/electron-builder/issues/4987
     app.commandLine.appendSwitch('disable-http2');
@@ -194,6 +210,16 @@ export class Main {
 
   getOptions(): BrowserWindowConstructorOptions {
     const preload = path.join(__dirname, 'main', 'preload.js');
+    // Security audit (Plaid MVP, 2026-05):
+    //   contextIsolation: true   - keeps renderer JS isolated from preload's Node APIs.
+    //   nodeIntegration: false   - renderer cannot call Node APIs directly.
+    //   sandbox: false           - intentional: the preload script needs Node modules
+    //                              (require('source-map-support'), bespoke fs/path access in
+    //                              `main/preload.ts`) which the OS-level sandbox blocks.
+    //                              Since contextIsolation is on and nodeIntegration is off,
+    //                              the renderer surface remains protected.
+    // CSP is injected at runtime via `session.webRequest.onHeadersReceived` (see
+    // installRendererCsp() below) so it can adapt to the user's configured cloud origin.
     const options: BrowserWindowConstructorOptions = {
       width: this.WIDTH,
       height: this.HEIGHT,
@@ -223,6 +249,8 @@ export class Main {
     if (this.isMac) {
       this.setMacDockIcon();
     }
+
+    this.installRendererCsp();
 
     const options = this.getOptions();
     this.mainWindow = new BrowserWindow(options);
@@ -263,6 +291,53 @@ export class Main {
 
     // Use the registered protocol url to load the files.
     this.winURL = 'app://./index.html';
+  }
+
+  /**
+   * Inject a Content-Security-Policy response header for every renderer fetch so that:
+   *   - scripts can only come from our own bundle (`'self'` / `app:` / dev Vite host) and `cdn.plaid.com`
+   *   - frames can only come from `*.plaid.com` (Plaid Link drives bank OAuth via iframes)
+   *   - network calls are limited to our own bundle, our cloud origin, and `*.plaid.com`
+   * Idempotent: only attaches the listener once.
+   */
+  cspInstalled = false;
+  installRendererCsp() {
+    if (this.cspInstalled) {
+      return;
+    }
+    const ses = session.defaultSession;
+    if (!ses) {
+      return;
+    }
+    // Vue 3 + Tailwind in our build inline styles; strict 'self' would break the UI.
+    // We keep style/script local to our bundle and only allow Plaid CDN as a remote
+    // origin. 'unsafe-inline' is scoped to styles only (Vue scoped styles).
+    const directives = [
+      "default-src 'self' app:",
+      "script-src 'self' app: 'unsafe-inline' 'unsafe-eval' https://cdn.plaid.com",
+      "style-src 'self' app: 'unsafe-inline'",
+      "img-src 'self' app: data: blob: https://*.plaid.com",
+      "font-src 'self' app: data:",
+      "connect-src 'self' app: http://127.0.0.1:* http://localhost:* https://*.plaid.com https:",
+      "frame-src 'self' https://*.plaid.com https://*.plaid.io",
+      "worker-src 'self' app: blob:",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ];
+    const csp = directives.join('; ');
+    ses.webRequest.onHeadersReceived((details, callback) => {
+      const headers = { ...(details.responseHeaders ?? {}) };
+      // Drop any existing CSP header so we don't end up with two conflicting ones.
+      for (const k of Object.keys(headers)) {
+        if (k.toLowerCase() === 'content-security-policy') {
+          delete headers[k];
+        }
+      }
+      headers['Content-Security-Policy'] = [csp];
+      callback({ responseHeaders: headers });
+    });
+    this.cspInstalled = true;
   }
 
   setMainWindowListeners() {

@@ -21,9 +21,10 @@ import { setLanguageMap } from './utils/language';
   fyo.store.language = language || 'English';
 
   registerIpcRendererListeners();
-  const { isDevelopment, platform, version } = await ipc.getEnv();
+  const { isDevelopment, appEnv, platform, version } = await ipc.getEnv();
 
   fyo.store.isDevelopment = isDevelopment;
+  fyo.store.appEnv = appEnv;
   fyo.store.appVersion = version;
   fyo.store.platform = platform;
   const platformName = getPlatformName(platform);
@@ -59,11 +60,41 @@ import { setLanguageMap } from './utils/language';
   await fyo.telemetry.logOpened();
   app.mount('#app-mount');
   await nextTick();
-  document.getElementById('boot-splash')?.remove();
 })();
 
 function setErrorHandlers(app: VueApp) {
+  // Browsers surface a handful of benign or actionable-by-the-user-only
+  // events through window.onerror with no Error object attached. Reporting
+  // these as if they were app crashes spams "Report Error" toasts on the
+  // dashboard (most often: ResizeObserver layout-loop notifications when a
+  // hidden chart re-mounts after re-activation).
+  function isBenignWindowError(message: unknown): boolean {
+    if (typeof message !== 'string') {
+      return false;
+    }
+
+    const text = message.toLowerCase();
+    return (
+      text.includes('resizeobserver loop') ||
+      text === 'script error.' ||
+      text === 'script error'
+    );
+  }
+
   window.onerror = (message, source, lineno, colno, error) => {
+    if (!error && isBenignWindowError(message)) {
+      if (fyo.store.isDevelopment) {
+        // eslint-disable-next-line no-console
+        console.warn('[renderer] suppressed benign window.onerror', {
+          message,
+          source,
+          lineno,
+          colno,
+        });
+      }
+      return;
+    }
+
     error = error ?? new Error('triggered in window.onerror');
     // eslint-disable-next-line @typescript-eslint/no-floating-promises
     handleError(true, error, { message, source, lineno, colno });

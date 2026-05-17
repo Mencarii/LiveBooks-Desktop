@@ -15,18 +15,23 @@ export function getLivebooksCloudOrigin(): string {
   return trimTrailingSlash(raw || 'http://127.0.0.1:3000');
 }
 
+/** Cloud dashboard; unauthenticated visitors are redirected to sign-in by the server. */
+export function livebooksCloudRootUrl(): string {
+  return `${getLivebooksCloudOrigin()}/`;
+}
+
 export function livebooksCloudSignInUrl(): string {
-  return `${getLivebooksCloudOrigin()}/session/new`;
+  return livebooksCloudRootUrl();
 }
 
 export function livebooksCloudSignUpUrl(): string {
-  return `${getLivebooksCloudOrigin()}/registrations/new`;
+  return livebooksCloudRootUrl();
 }
 
 export function livebooksCloudSubscribeUrl(): string {
-  return `${getLivebooksCloudOrigin()}/subscribe`;
+  return livebooksCloudRootUrl();
 }
 
-export function livebooksCloudRootUrl(): string {
-  return `${getLivebooksCloudOrigin()}/`;
+export function livebooksCloudAccountSecurityUrl(): string {
+  return livebooksCloudRootUrl();
 }

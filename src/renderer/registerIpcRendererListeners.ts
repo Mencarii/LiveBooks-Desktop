@@ -3,6 +3,8 @@ import { handleError } from 'src/errorHandling';
 import { fyo } from 'src/initFyo';
 import { showToast } from 'src/utils/interactive';
 import { syncDocumentsToERPNext } from 'src/utils/erpnextSync';
+import { dispatchLivebooksCloudSessionAppRefresh } from 'src/utils/livebooksCloud';
+import { refreshLivebooksSubscription } from 'src/utils/livebooksCloudSubscription';
 
 export default function registerIpcRendererListeners() {
   ipc.registerMainProcessErrorListener(
@@ -55,6 +57,17 @@ export default function registerIpcRendererListeners() {
         message: t`LiveBooks Cloud account connected`,
         duration: 'short',
       });
+    }
+    dispatchLivebooksCloudSessionAppRefresh();
+    void refreshLivebooksSubscription(signedIn);
+    // Follow-up refresh: API calls right after handoff can race the main-process
+    // token write or the local Rails server waking up; retry so sidebar/bank UI
+    // clears "Cannot reach LiveBooks Cloud" without a full app restart.
+    if (signedIn) {
+      window.setTimeout(() => {
+        dispatchLivebooksCloudSessionAppRefresh();
+        void refreshLivebooksSubscription(true);
+      }, 750);
     }
   });
 

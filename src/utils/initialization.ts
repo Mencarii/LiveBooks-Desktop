@@ -3,6 +3,8 @@ import { ConfigFile } from 'fyo/core/types';
 import { getRegionalModels, models } from 'models/index';
 import { ModelNameEnum } from 'models/types';
 import { TargetField } from 'schemas/types';
+import { generateDeviceId } from 'utils/ids';
+import { runSyncDeviceGuard } from 'src/utils/syncDeviceGuard';
 import {
   getMapFromList,
   getRandomString,
@@ -31,6 +33,8 @@ export async function initializeInstance(
   await setVersion(fyo);
   setDeviceId(fyo);
   await setInstanceId(fyo);
+  await ensureLedgerDeviceId(fyo);
+  await runSyncDeviceGuard(fyo);
   await setOpenCount(fyo);
   await setCurrencySymbols(fyo);
 }
@@ -121,18 +125,45 @@ async function setVersion(fyo: Fyo) {
   const { appVersion } = fyo.store;
   if (version !== appVersion) {
     const systemSettings = await fyo.doc.getDoc(ModelNameEnum.SystemSettings);
-    await systemSettings?.setAndSync('version', appVersion);
+    try {
+      await systemSettings?.setAndSync('version', appVersion);
+    } catch (e) {
+      if ((e as Error)?.constructor?.name === 'MandatoryError') {
+        // During initial setup, mandatory fields (locale, currency, etc.)
+        // haven't been populated yet. Version will be set once
+        // updateSystemSettings runs in the setup flow.
+        return;
+      }
+      throw e;
+    }
   }
 }
 
 function setDeviceId(fyo: Fyo) {
   let deviceId = fyo.config.get('deviceId');
-  if (deviceId === undefined) {
-    deviceId = getRandomString();
+  if (deviceId === undefined || typeof deviceId !== 'string') {
+    deviceId = generateDeviceId();
     fyo.config.set('deviceId', deviceId);
   }
 
   fyo.store.deviceId = deviceId;
+}
+
+async function ensureLedgerDeviceId(fyo: Fyo): Promise<void> {
+  const existing = (await fyo.getValue(
+    ModelNameEnum.SystemSettings,
+    'ledgerDeviceId'
+  )) as string | undefined;
+  if (typeof existing === 'string' && existing.length > 0) {
+    return;
+  }
+  const machineId = fyo.config.get('deviceId');
+  const ledgerDeviceId =
+    typeof machineId === 'string' && machineId.length > 0
+      ? machineId
+      : generateDeviceId();
+  const systemSettings = await fyo.doc.getDoc(ModelNameEnum.SystemSettings);
+  await systemSettings.setAndSync('ledgerDeviceId', ledgerDeviceId);
 }
 
 async function setInstanceId(fyo: Fyo) {

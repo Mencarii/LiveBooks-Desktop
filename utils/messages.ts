@@ -45,6 +45,19 @@ export enum IPC_ACTIONS {
   DB_CALL = 'db-call',
   DB_BESPOKE = 'db-bespoke',
   DB_SCHEMA = 'db-schema',
+  DB_ENCRYPTION_STATUS = 'db-encryption-status',
+  /** Day-1 Phase 2.1 — boot matrix probe (P0–P5); returns { code, countryCode? }. */
+  DB_BOOT_PROBE = 'db-boot-probe',
+  /** Day-1 Phase 2.3 — push SQLCipher key to cloud escrow (main + Bearer only). */
+  DESKTOP_KEY_ESCROW_PUSH = 'desktop-key-escrow-push',
+  /** Day-1 Phase 2.3 — whether cloud holds an escrowed key for the signed-in user. */
+  DESKTOP_KEY_ESCROW_STATUS = 'desktop-key-escrow-status',
+  // Day-1 Phase 2.2 — main-process-only recovery channel. The renderer
+  // sends credentials (and, after Phase 1b, a TOTP code); the main
+  // process performs the cloud round-trip, persists the recovered key
+  // into the OS keychain via setDatabaseKeyFromRecovery, and replies
+  // with a success/failure status. NO key material crosses IPC.
+  RECOVERY_SUBMIT_AND_REKEY = 'recovery-submit-and-rekey',
 }
 
 // ipcMain.send(...)
