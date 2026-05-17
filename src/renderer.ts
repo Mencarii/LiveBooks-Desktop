@@ -10,11 +10,16 @@ import { outsideClickDirective } from './renderer/helpers';
 import registerIpcRendererListeners from './renderer/registerIpcRendererListeners';
 import router from './router';
 import { stringifyCircular } from './utils';
+import {
+  markRendererAppStart,
+  markRendererMounted,
+} from './utils/bootPerformance';
 import { setLanguageMap } from './utils/language';
 import { runWhenIdle } from './utils/runWhenIdle';
 
 // eslint-disable-next-line @typescript-eslint/no-floating-promises
 (async () => {
+  markRendererAppStart();
   const language = fyo.config.get('language') as string;
   if (language) {
     await setLanguageMap(language);
@@ -22,12 +27,21 @@ import { runWhenIdle } from './utils/runWhenIdle';
   fyo.store.language = language || 'English';
 
   registerIpcRendererListeners();
-  const { isDevelopment, appEnv, platform, version } = await ipc.getEnv();
+  const {
+    isDevelopment,
+    appEnv,
+    platform,
+    version,
+    telemetryEnabled,
+    updaterEnabled,
+  } = await ipc.getEnv();
 
   fyo.store.isDevelopment = isDevelopment;
   fyo.store.appEnv = appEnv;
   fyo.store.appVersion = version;
   fyo.store.platform = platform;
+  fyo.store.telemetryEnabled = telemetryEnabled;
+  fyo.store.updaterEnabled = updaterEnabled;
   const platformName = getPlatformName(platform);
 
   setOnWindow(isDevelopment);
@@ -60,8 +74,11 @@ import { runWhenIdle } from './utils/runWhenIdle';
 
   app.mount('#app-mount');
   await nextTick();
+  markRendererMounted();
   runWhenIdle(() => {
-    void fyo.telemetry.logOpened();
+    if (fyo.store.telemetryEnabled) {
+      void fyo.telemetry.logOpened();
+    }
   });
 })();
 

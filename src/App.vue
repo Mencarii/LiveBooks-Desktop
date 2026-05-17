@@ -47,6 +47,7 @@
       @dismiss="showFreeBackupSafetyModal = false"
       @exported="showFreeBackupSafetyModal = false"
     />
+    <LoadingWorkspaceOverlay :open="loadingWorkspace" />
 
     <!-- Render target for toasts -->
     <div
@@ -68,6 +69,7 @@ import DatabaseSelector from './pages/DatabaseSelector.vue';
 import Desk from './pages/Desk.vue';
 import RecoveryMode from './pages/RecoveryMode.vue';
 import FreeUserBackupSafetyModal from './components/FreeUserBackupSafetyModal.vue';
+import LoadingWorkspaceOverlay from './components/LoadingWorkspaceOverlay.vue';
 import {
   recordDatabaseOpenForBackupReminder,
   shouldShowFreeBackupSafetyNet,
@@ -83,9 +85,14 @@ import './styles/index.css';
 import { connectToDatabase, dbErrorActionSymbols } from './utils/db';
 import { initializeInstance } from './utils/initialization';
 import * as injectionKeys from './utils/injectionKeys';
-import { showDialog, showToast } from './utils/interactive';
-import { setLanguageMap } from './utils/language';
+import { showDialog } from './utils/interactive';
 import { updateConfigFiles } from './utils/misc';
+import {
+  markSetInitialScreenEnd,
+  markSetInitialScreenStart,
+  markSplashDismissed,
+  markWorkspaceReady,
+} from './utils/bootPerformance';
 import { updatePrintTemplates } from './utils/printTemplates';
 import { Search } from './utils/search';
 import { Shortcuts } from './utils/shortcuts';
@@ -93,12 +100,11 @@ import { routeTo } from './utils/ui';
 import { useKeys } from './utils/vueUtils';
 import { setDarkMode } from 'src/utils/theme';
 import {
-  registerInstanceToERPNext,
-  updateERPNSyncSettings,
-} from './utils/erpnextSync';
-import { ERPNextSyncSettings } from 'models/baseModels/ERPNextSyncSettings/ERPNextSyncSettings';
-import { ErrorLogEnum } from 'fyo/telemetry/types';
-import { dismissBootSplash, waitForNextPaint } from './bootSplash';
+  dismissBootSplash,
+  isBootSplashVisible,
+  setBootSplashSubtitle,
+  waitForNextPaint,
+} from './bootSplash';
 import { runWhenIdle } from './utils/runWhenIdle';
 
 enum Screen {
@@ -116,6 +122,7 @@ export default defineComponent({
     DatabaseSelector,
     RecoveryMode,
     FreeUserBackupSafetyModal,
+    LoadingWorkspaceOverlay,
     WindowsTitleBar,
   },
   setup() {
@@ -150,12 +157,14 @@ export default defineComponent({
       companyName: '',
       darkMode: false,
       showFreeBackupSafetyModal: false,
+      loadingWorkspace: false,
     } as {
       activeScreen: null | Screen;
       dbPath: string;
       companyName: string;
       darkMode: boolean | undefined;
       showFreeBackupSafetyModal: boolean;
+      loadingWorkspace: boolean;
     };
   },
   computed: {
@@ -169,21 +178,42 @@ export default defineComponent({
     },
   },
   async mounted() {
+    markSetInitialScreenStart();
     const splashStarted = Date.now();
+    let pendingDbPath: string | null = null;
     try {
-      await this.setInitialScreen();
+      pendingDbPath = this.prepareInitialScreen();
     } catch {
       if (this.activeScreen === null) {
         this.activeScreen = Screen.DatabaseSelector;
       }
     } finally {
-      await nextTick();
-      await waitForNextPaint();
-      await dismissBootSplash(0, splashStarted);
+      if (!pendingDbPath) {
+        await nextTick();
+        await waitForNextPaint();
+        await dismissBootSplash(0, splashStarted);
+        markSplashDismissed();
+        markSetInitialScreenEnd();
+      }
       if (this.activeScreen === null) {
         this.activeScreen = Screen.DatabaseSelector;
       }
     }
+
+    if (pendingDbPath) {
+      setBootSplashSubtitle('Loading your workspace…');
+      try {
+        await this.fileSelected(pendingDbPath);
+      } catch (error) {
+        await handleErrorWithDialog(error, undefined, true, true);
+        await this.showDbSelector();
+      } finally {
+        await dismissBootSplash(0, splashStarted);
+        markSplashDismissed();
+        markSetInitialScreenEnd();
+      }
+    }
+
     runWhenIdle(() => {
       void startLivebooksSubscriptionPolling();
     });
@@ -192,25 +222,24 @@ export default defineComponent({
     this.darkMode = darkMode;
   },
   methods: {
-    async setInitialScreen(): Promise<void> {
+    prepareInitialScreen(): string | null {
       const lastSelectedFilePath = fyo.config.get('lastSelectedFilePath', null);
+      this.activeScreen = Screen.DatabaseSelector;
 
       if (
         typeof lastSelectedFilePath !== 'string' ||
         !lastSelectedFilePath.length
       ) {
-        this.activeScreen = Screen.DatabaseSelector;
-        return;
+        return null;
       }
 
-      await this.fileSelected(lastSelectedFilePath);
+      return lastSelectedFilePath;
     },
     async setSearcher(): Promise<void> {
       this.searcher = new Search(fyo);
       await this.searcher.initializeKeywords();
     },
     async setDesk(filePath: string): Promise<void> {
-      await setLanguageMap();
       const openCount = recordDatabaseOpenForBackupReminder();
       if (
         !this.showFreeBackupSafetyModal &&
@@ -221,7 +250,9 @@ export default defineComponent({
       }
       this.activeScreen = Screen.Desk;
       await this.setDeskRoute();
-      await fyo.telemetry.start(true);
+      if (fyo.store.telemetryEnabled) {
+        await fyo.telemetry.start(true);
+      }
       this.dbPath = filePath;
       this.companyName = (await fyo.getValue(
         ModelNameEnum.AccountingSettings,
@@ -229,8 +260,13 @@ export default defineComponent({
       )) as string;
       updateConfigFiles(fyo);
       runWhenIdle(() => {
-        void ipc.checkForUpdates();
+        void ipc.initLoyaltyExpiryJob();
       });
+      if (fyo.store.updaterEnabled) {
+        runWhenIdle(() => {
+          void ipc.checkForUpdates();
+        });
+      }
       runWhenIdle(() => {
         void this.setSearcher();
       });
@@ -239,6 +275,21 @@ export default defineComponent({
       this.activeScreen = Screen.SetupWizard;
     },
     async fileSelected(filePath: string): Promise<void> {
+      const showWorkspaceOverlay =
+        this.activeScreen !== Screen.Desk && !isBootSplashVisible();
+      if (showWorkspaceOverlay) {
+        this.loadingWorkspace = true;
+      }
+
+      try {
+        await this.openSelectedDatabase(filePath);
+      } finally {
+        if (showWorkspaceOverlay) {
+          this.loadingWorkspace = false;
+        }
+      }
+    },
+    async openSelectedDatabase(filePath: string): Promise<void> {
       fyo.config.set('lastSelectedFilePath', filePath);
       if (filePath !== ':memory:' && !(await ipc.checkDbAccess(filePath))) {
         await showDialog({
@@ -303,57 +354,6 @@ export default defineComponent({
 
       await initializeInstance(filePath, false, countryCode, fyo);
       await updatePrintTemplates(fyo);
-
-      const syncSettingsDoc = (await fyo.doc.getDoc(
-        ModelNameEnum.ERPNextSyncSettings
-      )) as ERPNextSyncSettings;
-
-      const baseURL = syncSettingsDoc.baseURL;
-      const token = syncSettingsDoc.authToken;
-      const enableERPNextSync =
-        fyo.singles.AccountingSettings?.enableERPNextSync;
-
-      if (enableERPNextSync && baseURL && token) {
-        try {
-          await registerInstanceToERPNext(fyo);
-          await updateERPNSyncSettings(fyo);
-          await ipc.initScheduler(
-            `${fyo.singles.ERPNextSyncSettings?.dataSyncInterval as string}m`
-          );
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-
-          try {
-            const existing = await fyo.db.getAll(
-              ErrorLogEnum.IntegrationErrorLog,
-              {
-                filters: {
-                  error: errorMessage,
-                },
-                limit: 1,
-              }
-            );
-
-            if (!existing.length) {
-              await fyo.doc
-                .getNewDoc(ErrorLogEnum.IntegrationErrorLog, {
-                  error: errorMessage,
-                  data: JSON.stringify({
-                    instance: fyo.singles.ERPNextSyncSettings?.deviceID,
-                    operation: 'register_instance',
-                    trigger: 'showSetupWizardOrDesk',
-                    baseURL: baseURL,
-                  }),
-                })
-                .sync();
-            }
-          } catch (logError) {
-            throw logError;
-          }
-          showToast({ message: 'Connection Failed', type: 'error' });
-        }
-      }
 
       await this.setDesk(filePath);
     },
@@ -420,6 +420,9 @@ export default defineComponent({
       }
 
       await routeTo(route);
+      await nextTick();
+      await waitForNextPaint();
+      markWorkspaceReady();
     },
     async showDbSelector(): Promise<void> {
       localStorage.clear();
