@@ -8,13 +8,11 @@ import {
   SchemaMap,
   TargetField,
 } from '../../schemas/types';
-import {
-  getIsNullOrUndef,
-  getRandomString,
-  getValueMapFromList,
-} from '../../utils';
+import { generateDocId } from 'utils/ids';
+import { getIsNullOrUndef, getValueMapFromList } from '../../utils';
 import { DatabaseBase, GetAllOptions, QueryFilter } from '../../utils/db/types';
 import { getDefaultMetaFieldValueMap, sqliteTypeMap, SYSTEM } from '../helpers';
+import { applyTargetCipherProfile } from './cipherProfile';
 import {
   AlterConfig,
   ColumnDiff,
@@ -52,7 +50,7 @@ export default class DatabaseCore extends DatabaseBase {
   schemaMap: SchemaMap = {};
   connectionParams: Knex.Config;
 
-  constructor(dbPath?: string) {
+  constructor(dbPath?: string, encryptionKey?: string) {
     super();
     this.dbPath = dbPath ?? ':memory:';
     this.connectionParams = {
@@ -60,15 +58,31 @@ export default class DatabaseCore extends DatabaseBase {
       connection: {
         filename: this.dbPath,
       },
+      pool: {
+        afterCreate: (
+          db: unknown,
+          done: (err: Error | null, db: unknown) => void
+        ) => {
+          const sqliteDb = db as { pragma: (stmt: string) => void };
+          if (encryptionKey) {
+            applyTargetCipherProfile(sqliteDb, encryptionKey);
+          }
+          sqliteDb.pragma('foreign_keys = ON');
+          done(null, db);
+        },
+      },
       useNullAsDefault: true,
       asyncStackTraces: process.env.NODE_ENV === 'development',
     };
   }
 
-  static async getCountryCode(dbPath: string): Promise<string> {
+  static async getCountryCode(
+    dbPath: string,
+    encryptionKey?: string
+  ): Promise<string> {
     let countryCode = 'in';
-    const db = new DatabaseCore(dbPath);
-    await db.connect();
+    const db = new DatabaseCore(dbPath, encryptionKey);
+    db.connect();
 
     let query: { value: string }[] = [];
     try {
@@ -92,9 +106,8 @@ export default class DatabaseCore extends DatabaseBase {
     this.schemaMap = schemaMap;
   }
 
-  async connect() {
+  connect() {
     this.knex = knex(this.connectionParams);
-    await this.knex.raw('PRAGMA foreign_keys=ON');
   }
 
   async close() {
@@ -730,7 +743,7 @@ export default class DatabaseCore extends DatabaseBase {
     idx: number
   ) {
     if (!child.name) {
-      child.name ??= getRandomString();
+      child.name ??= generateDocId();
     }
     child.parent = parentName;
     child.parentSchemaName = parentSchemaName;
@@ -789,7 +802,7 @@ export default class DatabaseCore extends DatabaseBase {
 
   #insertOne(schemaName: string, fieldValueMap: FieldValueMap) {
     if (!fieldValueMap.name) {
-      fieldValueMap.name = getRandomString();
+      fieldValueMap.name = generateDocId();
     }
 
     // Column fields
@@ -857,7 +870,7 @@ export default class DatabaseCore extends DatabaseBase {
       parent: singleSchemaName,
       fieldname,
       value,
-      name: getRandomString(),
+      name: generateDocId(),
     });
     return await this.knex!('SingleValue').insert(fieldValueMap);
   }
