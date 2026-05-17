@@ -2,8 +2,12 @@ import ChartOfAccounts from 'src/pages/ChartOfAccounts.vue';
 import CommonForm from 'src/pages/CommonForm/CommonForm.vue';
 import Dashboard from 'src/pages/Dashboard/Dashboard.vue';
 import GetStarted from 'src/pages/GetStarted.vue';
-import BankFeeds from 'src/pages/BankFeeds.vue';
+import RecoveryMode from 'src/pages/RecoveryMode.vue';
+import BankFeedHub from 'src/pages/BankFeedHub.vue';
+import BankAccountActivity from 'src/pages/BankAccountActivity.vue';
+import BankFeedSettings from 'src/pages/BankFeedSettings.vue';
 import BankReconcile from 'src/pages/BankReconcile.vue';
+import BankReconcileHub from 'src/pages/BankReconcileHub.vue';
 import BankStatementImport from 'src/pages/BankStatementImport.vue';
 import ImportListsHub from 'src/pages/ImportListsHub.vue';
 import ImportWizard from 'src/pages/ImportWizard.vue';
@@ -28,6 +32,11 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/get-started',
     component: GetStarted,
+  },
+  {
+    path: '/recovery',
+    name: 'Recovery Mode',
+    component: RecoveryMode,
   },
   {
     path: `/edit/:schemaName/:name`,
@@ -114,16 +123,32 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/bank-feeds',
     name: 'Bank feeds',
-    component: BankFeeds,
+    component: BankFeedHub,
+  },
+  {
+    path: '/bank-feeds/settings',
+    name: 'Bank Feed Settings',
+    component: BankFeedSettings,
+  },
+  {
+    path: '/bank-feeds/activity/:accountName',
+    name: 'Bank Account Activity',
+    component: BankAccountActivity,
+    props: true,
+  },
+  {
+    path: '/reconcile',
+    name: 'Reconcile Hub',
+    component: BankReconcileHub,
   },
   {
     path: '/bank-statement-import',
-    name: 'Bank statement import',
+    name: 'Bank Statement Import',
     component: BankStatementImport,
   },
   {
     path: '/bank-reconcile/:name',
-    name: 'Bank reconcile',
+    name: 'Bank Reconcile',
     component: BankReconcile,
     props: true,
   },

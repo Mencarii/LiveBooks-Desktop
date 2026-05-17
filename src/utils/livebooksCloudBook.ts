@@ -2,20 +2,38 @@ import type { Fyo } from 'fyo';
 import {
   getLivebooksCloudSessionSummary,
   livebooksCloudRequest,
+  livebooksCloudUnreachableUserMessage,
 } from 'src/utils/livebooksCloud';
+import type { LivebooksCloudApiResult } from 'src/utils/livebooksCloud';
 
 export type CloudBookContext =
   | { ok: true; bookId: string }
   | {
       ok: false;
-      reason: 'not_signed_in' | 'no_instance' | 'api_error';
+      reason:
+        | 'not_signed_in'
+        | 'no_instance'
+        | 'api_error'
+        | 'cloud_unreachable';
       message?: string;
     };
 
+function isLivebooksCloudNetworkFailure(res: LivebooksCloudApiResult): boolean {
+  if (res.status !== 0) {
+    return false;
+  }
+  const d = res.data;
+  return (
+    d !== null &&
+    typeof d === 'object' &&
+    'error' in d &&
+    (d as { error: unknown }).error === 'network_error'
+  );
+}
+
 /**
- * Resolves the cloud book UUID for the open company file using
- * `SystemSettings.instanceId` as `gnu_book_guid`. Creates the cloud book on
- * first success when lookup returns 404.
+ * Resolves the cloud book UUID for the open company using Frappe Books
+ * `store.instanceId`. Creates the cloud book on first success when lookup returns 404.
  */
 export async function ensureLivebooksCloudBookId(
   fyo: Fyo
@@ -25,15 +43,23 @@ export async function ensureLivebooksCloudBookId(
     return { ok: false, reason: 'not_signed_in' };
   }
 
-  const gnu = fyo.store.instanceId;
-  if (!gnu) {
+  const instanceId = fyo.store.instanceId;
+  if (!instanceId) {
     return { ok: false, reason: 'no_instance' };
   }
 
   const lookup = await livebooksCloudRequest({
     method: 'GET',
-    path: `/api/v1/books/lookup?gnu_book_guid=${encodeURIComponent(gnu)}`,
+    path: `/api/v1/books/lookup?instance_id=${encodeURIComponent(instanceId)}`,
   });
+
+  if (isLivebooksCloudNetworkFailure(lookup)) {
+    return {
+      ok: false,
+      reason: 'cloud_unreachable',
+      message: livebooksCloudUnreachableUserMessage(),
+    };
+  }
 
   if (lookup.ok && lookup.data && typeof lookup.data === 'object') {
     const id = (lookup.data as { book_id?: unknown }).book_id;
@@ -50,8 +76,15 @@ export async function ensureLivebooksCloudBookId(
     const created = await livebooksCloudRequest({
       method: 'POST',
       path: '/api/v1/books',
-      body: { gnu_book_guid: gnu, name: companyName },
+      body: { instance_id: instanceId, name: companyName },
     });
+    if (isLivebooksCloudNetworkFailure(created)) {
+      return {
+        ok: false,
+        reason: 'cloud_unreachable',
+        message: livebooksCloudUnreachableUserMessage(),
+      };
+    }
     if (
       created.ok &&
       created.data &&

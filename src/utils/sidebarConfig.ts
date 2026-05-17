@@ -170,6 +170,24 @@ function getCompleteSidebar(): SidebarConfig {
       icon: 'dashboard',
     },
     {
+      label: t`Banking`,
+      name: 'banking',
+      icon: 'opening-ac',
+      route: '/bank-feeds',
+      items: [
+        {
+          label: t`Live Feeds`,
+          name: 'bank-live-feeds',
+          route: '/bank-feeds',
+        },
+        {
+          label: t`Reconcile`,
+          name: 'bank-reconcile-hub',
+          route: '/reconcile',
+        },
+      ],
+    },
+    {
       label: t`Sales`,
       name: 'sales',
       icon: 'sales',
@@ -284,22 +302,6 @@ function getCompleteSidebar(): SidebarConfig {
           name: 'journal-entry',
           route: '/list/JournalEntry',
           schemaName: 'JournalEntry',
-        },
-        {
-          label: t`Bank feeds`,
-          name: 'bank-feeds',
-          route: '/bank-feeds',
-        },
-        {
-          label: t`Bank statements`,
-          name: 'bank-statements',
-          route: '/list/BankStatement',
-          schemaName: 'BankStatement',
-        },
-        {
-          label: t`Import statement (CSV)`,
-          name: 'bank-statement-import',
-          route: '/bank-statement-import',
         },
         {
           label: t`Customers & Suppliers`,
