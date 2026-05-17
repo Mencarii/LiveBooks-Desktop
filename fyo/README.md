@@ -11,6 +11,8 @@ backend.
 
 This platform variablity will be handled by code in the `fyo/demux` subdirectory.
 
+_In LiveBooks Desktop (Electron), database demux calls use IPC; `DB_CALL` from the renderer is limited to the allowlisted methods in [`backend/helpers.ts`](../backend/helpers.ts) (`databaseMethodSet`). SQLCipher keys, cloud escrow, and recovery run only in the **main** process — see [`SECURITY.md`](../SECURITY.md) and [`utils/databaseKeyStore.ts`](../utils/databaseKeyStore.ts). IPC `error.code` (e.g. `KEYCHAIN_CORRUPTED`) is propagated through [`fyo/demux/db.ts`](demux/db.ts) for Recovery Mode routing._
+
 ## Pre Req
 
 **Singleton**: The `Fyo` class is used as a singleton throughout Books, this
@@ -62,30 +64,32 @@ other things.
 **First Load**: i.e. registering or creating a new instance.
 
 - Get `countryCode` from the setup wizard.
+- (Electron) The **main** process mints a new namespaced SQLCipher key only on `DB_CREATE` (when `safeStorage` is available); the renderer calls `fyo.db.createNewDatabase` via IPC.
 - Create a new DB using `fyo.db.createNewDatabase` with the `countryCode`.
 - Get models and `regionalModels` using `countryCode` from `models/index.ts/getRegionalModels`.
 - Call `fyo.initializeAndRegister` with the all models.
 
 **Next Load**: i.e. logging in or opening an existing instance.
 
-- Connect to DB using `fyo.db.connectToDatabase` and get `countryCode` from the return.
-- Get models and `regionalModels` using `countryCode` from `models/index.ts/getRegionalModels`.
-- Call `fyo.initializeAndRegister` with the all models.
+- (Electron) The **main** process reads the key with `getDatabaseKeyOnly` only — it never writes a new key on connect ([`utils/databaseKeyStore.ts`](../utils/databaseKeyStore.ts)). Decrypt failure surfaces `KEYCHAIN_CORRUPTED` and Recovery Mode. Legacy plaintext → encrypted migration is dev/target-only, not the production connect path.
+- The renderer calls `fyo.db.connectToDatabase(dbPath, countryCode?)`; the demux invokes IPC so the main process applies the key **before** any query reads **SystemSettings** (see [`DatabaseCore.getCountryCode`](../backend/database/core.ts)). Encrypted SQLite cannot return `countryCode` until the file is unlocked.
+- Use the returned `countryCode` to load models and `regionalModels` from `models/index.ts/getRegionalModels`.
+- Call `fyo.initializeAndRegister` with all models.
 
 _Note: since **SystemSettings** are initialized on `fyo.initializeAndRegister`
 db needs to be set first else an error will be thrown_
 
 ## Testing
 
-For testing the `fyo` class, `mocha` is used (`node` side). So for this the
-demux classes are directly replaced by `node` side managers such as
-`DatabaseManager`.
+For testing the `fyo` class, **[Tape](https://github.com/tapjs/tape)** is used on the **Node** side (`yarn test` runs [`scripts/test.sh`](../scripts/test.sh) with `IS_TEST=true`). The demux classes are replaced by Node-side managers such as `DatabaseManager`.
 
 For this to work the class signatures of the demux class and the manager have to
 be the same which is maintained by abstract demux classes.
 
 `DatabaseManager` is used as the `DatabaseDemux` for testing without API or IPC
 calls. For `AuthDemux` the `DummyAuthDemux` class is used.
+
+> **Testing environment (encryption):** Tape runs in plain **Node**, not Electron — `safeStorage` is unavailable. Tests use [`getTestFyo`](../tests/helpers.ts) (`isElectron: false`, `DatabaseManager`). Day-1 security specs: `yarn test:day1` (see [`docs/verification-matrix.md`](../docs/verification-matrix.md)). Set `LIVEBOOKS_TEST_DB_KEY` (64 hex) only when `allowTestEnvKey` is explicitly passed in keystore helpers.
 
 ## Translations
 

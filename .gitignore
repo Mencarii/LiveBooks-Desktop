@@ -25,6 +25,9 @@ yarn-error.log*
 *.sw?
 *.code-workspace
 
+# Yarn is the canonical package manager; ignore npm's lockfile to prevent split-brain installs.
+package-lock.json
+
 #Electron-builder output
 /dist_electron
 log_creds.txt

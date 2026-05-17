@@ -31,7 +31,7 @@ constructor. Check `schemas/README.md` for info on this.
 
 When adding stuff to `models/**` make sure that it isn't importing any Vue code
 or other frontend specific code globally. This is cause model file tests will
-directly use the the `Fyo` class and will be run using `mocha` on `node`.
+directly use the the `Fyo` class and will be run using **tape** on `node`.
 
 Importing frontend code will break all the tests. This also implies that one
 should be wary about transitive dependencies.

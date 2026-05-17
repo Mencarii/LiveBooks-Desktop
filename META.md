@@ -60,7 +60,7 @@ individual ones, check the `README.md` in those subdirectories:
 #### _client\*_
 
 The code in these folders is called during runtime from the _client_
-side but since they contain business logic, they are tested using `mocha` on the
+side but since they contain business logic, they are tested using **tape** on the
 _server_ side. This is a bit stupid and so will be fixed later.
 
 Due to this, the code in these files should not be calling _client_ side code
@@ -82,10 +82,9 @@ code associated with the types is written.
 
 If trying to understand the code in this project I'd suggest not ignoring these.
 
-#### `**/test/*.spec.ts`
+#### `**/tests/**/*.spec.ts`
 
-These contain tests, as of now all tests run on the _server_ side using `mocha`.
+These contain tests, as of now all tests run on the _server_ side using **tape** (default glob `./**/tests/**/*.spec.ts` via [`scripts/test.sh`](scripts/test.sh)).
 
-The tests files are located in `**/test` folders which are nested under the
-directories of what they are testing. No code from these files is called during
+The test files live under `**/tests` folders nested under the directories of what they are testing. No code from these files is called during
 runtime.

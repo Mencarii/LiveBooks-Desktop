@@ -1,199 +1,133 @@
-<div align="center" markdown="1">
-<br/>
+# LiveBooks Desktop
 
-<img src="https://frappe.io/files/books.png" alt="Frappe Books logo" width="80"/>
+**Modern accounting for US small business**
 
-<br/>
+Accounting built on **[Frappe Books](https://github.com/frappe/books)**, repackaged and extended for a **US audience**, with **bank feeds** and **reconciliation**.
 
-<h1>Frappe Books</h1>
+[GitHub release (latest by date)](https://github.com/Mencarii/LiveBooks-Desktop/releases)  
+Platforms  
+[Publish](https://github.com/Mencarii/LiveBooks-Desktop/actions/workflows/publish.yml)
 
-**Modern Accounting Made Simple**
+[Releases](https://github.com/Mencarii/LiveBooks-Desktop/releases) · [Contributing](.github/CONTRIBUTING.md) · [Upstream: Frappe Books](https://github.com/frappe/books)
 
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/frappe/books)](https://github.com/frappe/books/releases)
-![Platforms](https://img.shields.io/badge/platform-mac%2C%20windows%2C%20linux-yellowgreen)
-[![Publish](https://github.com/frappe/books/actions/workflows/publish.yml/badge.svg)](https://github.com/frappe/books/actions/workflows/publish.yml)
+**Pro Cloud Signup**: [mencarii.com](https://mencarii.com) (live bank feeds and more)
 
-</div>
+**Security & verification:** [`SECURITY.md`](SECURITY.md) · [`docs/verification-matrix.md`](docs/verification-matrix.md) · `yarn test:day1`
 
-<div align="center">
-<img src="https://user-images.githubusercontent.com/29507195/207267857-4ae48890-3fb2-4046-80cf-3256b46c72a0.png" alt="Frappe Books Preview"/>
-</div>
-<br />
-<div align="center">
-	<a href="https://frappe.io/books">Website</a>
-	-
-	<a href="https://docs.frappe.io/books">Documentation</a>
-</div>
+## About this repository
 
-## LiveBooks Desktop
+**[LiveBooks Desktop](https://github.com/Mencarii/LiveBooks-Desktop)** is a fork of [Frappe Books](https://github.com/frappe/books). We adapt terminology, defaults, and workflows for **US small businesses**, and ship **bank feeds** plus **bank reconciliation** on top of the upstream accounting core.
 
-This repository is **[LiveBooks Desktop](https://github.com/Mencarii/LiveBooks-Desktop)**, a fork of [Frappe Books](https://github.com/frappe/books). It is released under the **GNU Affero General Public License v3.0 only** (`AGPL-3.0-only`), consistent with upstream. See **`LICENSE`** and **`NOTICE`** for legal detail.
+This project is released under the **GNU Affero General Public License v3.0 only** (`AGPL-3.0-only`), in line with upstream licensing expectations for this codebase. See **`LICENSE`** and **`NOTICE`** for legal detail.
+
+**End users** (questions about using LiveBooks, not development): email **[ben.cheng@mencarii.com](mailto:ben.cheng@mencarii.com)**.
+
+**Developers** (suggestions, patches, local forks): use [GitHub Issues](https://github.com/Mencarii/LiveBooks-Desktop/issues) and read **[Contributing](.github/CONTRIBUTING.md)**. Mencarii does not support unofficial or modified builds you run yourself; the AGPL allows you to tweak and self-host your own variant, but that is **at your own risk** and not a supported “LiveBooks” product unless we publish it.
 
 ---
 
-## Frappe Books
+## Features
 
-Frappe Books is an open-source accounting software aimed at simplifying financial management for businesses. With its clean and user-friendly interface, it streamlines accounting tasks for small and medium-sized enterprises, offering a seamless solution for modern businesses to manage their finances with ease.
+Accounting core and many capabilities come from upstream; see **[frappe/books](https://github.com/frappe/books)** for the full upstream picture. LiveBooks adds US-oriented workflow plus:
 
-<details>
-<summary>Screenshots</summary>
-<br/>
-<img  alt="Pos" src="https://github.com/user-attachments/assets/f75116b4-cf5f-45ee-9927-ba380fa56a46" />
-    <br/><br/>
-    <img  alt="General Ledger" src="https://github.com/user-attachments/assets/58d8bcdf-1576-4008-b010-7054fb64a12d" />
-    <br/><br/>
-    <img  alt="Profit and Loss" src="https://github.com/user-attachments/assets/11bd67d1-d808-496b-ac4d-ef68c18b9419" />
+- **Bank feeds**: **Pro cloud** – Connect accounts and import transactions for faster books.
+- Reconciliation: Match bank activity to ledger entries.
+- Dashboard: Overview of key financial data and performance metrics.
+- Point of Sale: Integrated POS for retail sales.
+- Works offline: Continue working without the internet; **optional cloud sync**.
+- Double-entry accounting: Each transaction recorded across two accounts.
 
-</details>
+### Data philosophy
 
-### Motivation
+- **Local-first:** Your company ledger is a file on your machine, not a shared cloud database you must trust for every edit.
+- **Encrypted by default:** Books use SQLCipher; the encryption key is generated locally and, when the OS allows, stored via Electron [`safeStorage`](https://www.electronjs.org/docs/latest/api/safe-storage) (macOS Keychain / Windows DPAPI) — not as plaintext in app settings.
+- **Cloud is additive:** Sign-in and Pro features (bank feeds, optional MFA-protected key recovery) layer on top; offline work remains possible without cloud dependency.
+- **Distinct from upstream:** LiveBooks extends [Frappe Books](https://github.com/frappe/books) for US workflows and security boundaries documented in this repo — not a drop-in replacement for every upstream deployment pattern.
 
-Frappe Books addresses a market gap where small businesses face expensive, complex accounting tools. It offers an intuitive, open-source solution that combines simplicity with essential features, empowering businesses to manage finances effectively—even offline.
+### Security posture (summary)
 
-### Key Features
+| Topic                | Behavior                                                                                                                                                 |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SQLCipher ledger     | 256-bit hex key; main process only ([`databaseKeyStore.ts`](utils/databaseKeyStore.ts))                                                                  |
+| Per-account keys     | Namespaced by cloud user id or `local_{uuid}` for offline-created books                                                                                  |
+| Connect vs create    | **No** auto re-key on decrypt failure — routes to Recovery Mode                                                                                          |
+| Cloud session tokens | Encrypted via `safeStorage` when available; packaged builds refuse plaintext persistence ([`secureTokenStore.ts`](utils/secureTokenStore.ts))            |
+| Sensitive cloud APIs | Escrow / MFA / recovery paths blocked from renderer IPC ([`cloudApiDenylist.ts`](utils/cloudApiDenylist.ts))                                             |
+| Pro key backup       | MFA-gated retrieval; **not** zero-knowledge — see [`SECURITY.md`](SECURITY.md)                                                                           |
+| Code signing         | Frozen bundle id `io.livebooks.desktop`; unsigned→signed install may require cloud recovery ([`docs/signing-qa-runbook.md`](docs/signing-qa-runbook.md)) |
 
-- **Dashboard**: Provides an overview of key financial data and performance metrics.
-- **Point of Sale**: Simplifies retail transactions with an integrated POS system for easy sales processing.
-- **Works Offline**: Enables users to continue working without an internet connection and sync later.
-- **Double-entry accounting**: Ensures accurate financial tracking by recording each transaction in two accounts.
-- **Entries**
-  - **Invoicing**: Allows businesses to create and manage professional invoices effortlessly.
-  - **Billing**: Billing processes by generating bills and tracking payments.
-  - **Payments**: Records and tracks payments received and made.
-  - **Journal Entries**: Records financial transactions in the general ledger with detailed notes and adjustments.
-- **Financial Reports**
-  - **General Ledger**: Centralized record of all financial transactions, providing a comprehensive view of accounts.
-  - **Profit and Loss Statement**: Summarizes revenues, costs, and expenses to show business profitability.
-  - **Balance Sheet**: Displays a company’s assets, liabilities, and equity at a specific point in time.
-  - **Trial Balance**: Verifies the accuracy of accounting records by ensuring that debits and credits are balanced.
-    <br/>
+Full threat model, IPC denylist, and breach response: **[`SECURITY.md`](SECURITY.md)**.
 
-### Under the Hood
+### Under the hood
 
-- **Vue.js**: In Frappe Books, Vue.js powers the front-end, enabling a reactive and component-based UI. It ensures seamless interactions and dynamic updates, giving users a modern, responsive experience.
+- **Vue.js**: Reactive, component-based UI.
+- **Electron**: Desktop packaging for Windows, macOS, and Linux.
+- **SQLite** ([`better-sqlite3-multiple-ciphers`](https://www.npmjs.com/package/better-sqlite3-multiple-ciphers)): Local-first ledger in an SQLite file on the machine. When encryption is enabled, the file is encrypted at rest; a per-device 256-bit key (64 hex characters) is generated locally and, when Electron [`safeStorage`](https://www.electronjs.org/docs/latest/api/safe-storage) is available, that key material is encrypted before persistence via **electron-store** (see [`utils/databaseKeyStore.ts`](utils/databaseKeyStore.ts)). Opening the database applies the key in the main process before any ledger queries run.
 
-- **Electron**: Electron is used to package Frappe Books as a standalone desktop application, allowing it to run offline and provide a native-like experience across Windows, macOS, and Linux.
+**Handoff to accountants:** Use built-in **reports** (CSV/PDF and on-screen statements such as trial balance, profit and loss, balance sheet, and general ledger views)—the supported path for sharing financials with a CPA who does not use LiveBooks. Delivering a raw plaintext copy of the SQLite file is not the primary workflow.
 
-- **SQLite**: Frappe Books uses SQLite as its local database. All financial data, transactions, and configurations are stored securely in an SQLite file on the user's machine.
+---
 
-## Production Setup
+### Install LiveBooks Desktop
 
-### Manual
+Download the latest build for your platform from the **[LiveBooks Desktop releases](https://github.com/Mencarii/LiveBooks-Desktop/releases)** page.
 
-Download and install the latest release for your platform from the [releases
-page](https://github.com/frappe/books/releases) .
+---
 
-### Using Homebrew (for MacOS and Linux)
+## Development setup
 
-```zsh
-brew install --cask frappe-books
-```
+### Prerequisites
 
-### Via Flatpak (Linux)
+- **Node.js** `v20.18.1` (recommended via [nvm](https://github.com/nvm-sh/nvm#installing-and-updating))
+- **[Yarn classic](https://classic.yarnpkg.com/lang/en/docs/install/#mac-stable)** (v1)
 
-<a href='https://flathub.org/apps/io.frappe.books'>
-    <img width='120' alt='Get it on Flathub' src='https://flathub.org/api/badge?locale=en'/>
-</a>
-
-## Development Setup
-
-### Pre-requisites
-
-To get the dev environment up and running you need to first set up Node.js `v20.18.1` and npm. For this, we suggest using
-[nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
-Next, you will need to install [yarn](https://classic.yarnpkg.com/lang/en/docs/install/#mac-stable).
-
-### Clone and Run
-
-Once you are through the Pre-requisites, you can run the following commands to
-setup Frappe Books for development and building:
+### Clone and run
 
 ```bash
-# clone the repository
-git clone https://github.com/frappe/books.git
-
-# change directory
-cd books
-
-# install dependencies
+git clone https://github.com/Mencarii/LiveBooks-Desktop.git
+cd LiveBooks-Desktop
 yarn
 ```
 
-To run Frappe Books in development mode (with hot reload, etc):
+Development mode (hot reload, etc.):
 
 ```bash
-# start the electron app
 yarn dev
 ```
 
-**Note: First Boot**
+**First boot:** Electron starts immediately; the UI can take a few seconds while the dev server serves many files.
 
-When you run `yarn dev` electron will run immediately but the UI will take a
-couple of seconds to render this because of how dev mode works. Each file is
-individually served by the dev server. And there are many files that have to be
-sent.
+**Debug Electron main process:** Dev mode runs with `--inspect`. Connect a debugger to port **5858** (e.g. Chrome at `chrome://inspect`). See the [Electron main-process debugging guide](https://www.electronjs.org/docs/latest/tutorial/debugging-main-process#external-debuggers).
 
-**Note: Debug Electron Main Process**
-
-When in dev mode electron runs with the `--inspect` flag which allows an
-external debugger to connect to port 5858. You can use chrome for this by
-visiting `chrome://inspect` while Frappe Books is running in dev mode.
-
-See more [here](https://www.electronjs.org/docs/latest/tutorial/debugging-main-process#external-debuggers).
-
-#### Build
-
-To build Frappe Books and create an installer:
+### Build
 
 ```bash
-# start the electron app
 yarn build
 ```
 
-**Note: Build Target**
-By default the above command will build for your computer's operating system and
-architecture. To build for other environments (example: for linux from a windows
-computer) check the _Building_ section at
-[electron.build/cli](https://www.electron.build/cli).
+By default this targets your current OS and architecture. For other targets, see the _Building_ section in [electron.build/cli](https://www.electron.build/cli) (example: `yarn build --linux`).
 
-So to build for linux you could use the `--linux` flag like so: `yarn build --linux`.
+### LiveBooks Cloud (release and CI)
 
-## Want to Just Try Out or Contribute?
+- **API origin:** Set **`LIVEBOOKS_CLOUD_ORIGIN`** and **`VITE_LIVEBOOKS_CLOUD_ORIGIN`** to the same production base URL (no trailing slash) when producing binaries for end users. The [Publish](.github/workflows/publish.yml) workflow passes both from repository secret **`LIVEBOOKS_CLOUD_ORIGIN`**; if that secret is unset, the build still defaults to `http://127.0.0.1:3000` (suitable for local packaging only).
+- **Auto-updates:** Prerelease channels are **off** by default (`electron-updater`). For internal QA builds that should consume GitHub prereleases, set environment variable **`LIVEBOOKS_UPDATER_ALLOW_PRERELEASE=1`** (or `true`) when launching the app or when wrapping the packaged binary.
+- **Data encryption & session security:** See **Security posture** above. In **packaged** builds, refresh tokens are **not** written in plaintext when `safeStorage` is unavailable — you re-authenticate each launch. **Dev** (`yarn dev`) may use plaintext token fallback so contributors are not blocked.
+- **Day-1 verification:** `yarn test:day1` runs automated checks; pre-GA signing QA is in [`docs/signing-qa-runbook.md`](docs/signing-qa-runbook.md).
 
-If you want to contribute to Frappe Books, please check our [Contribution Guidelines](https://github.com/frappe/books/blob/master/.github/CONTRIBUTING.md). There are many ways you can contribute even if you don't code:
+---
 
-1. If you find any issues, no matter how small (even typos), you can [raise an issue](https://github.com/frappe/books/issues/new) to inform us.
-2. You can help us with language support by [contributing translations](https://github.com/frappe/books/wiki/Contributing-Translations).
-3. If you're an ardent user you can tell us what you would like to see.
-4. If you have accounting requirements, you can become an ardent user. 🙂
+## Contributing
 
-If you want to contribute code then you can fork this repo, make changes and raise a PR. ([see how to](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork))
+See **[.github/CONTRIBUTING.md](.github/CONTRIBUTING.md)** for how to suggest changes, open issues, and submit pull requests.
 
-## Translation Contributors
+---
 
-| Language              | Contributors                                                                                                                                                                                                                                      |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Arabic                | [taha2002](https://github.com/taha2002), [Faridget](https://github.com/faridget), [Osama Muhammed](https://github.com/osama1998H)                                                                                                                 |
-| Albanian              | [xoniks](https://github.com/xoniks)                                                                                                                                                                                                               |
-| Catalan               | Dídac E. Jiménez                                                                                                                                                                                                                                  |
-| Chinese - Simplified  | [wcxu21](https://github.com/wcxu21), [wolone](https://github.com/wolone), [Ji Qu](https://github.com/winkidney)                                                                                                                                   |
-| Chinese - Traditional | [Ethan Deng](https://github.com/ethandengs)                                                                                                                                                                                                       |
-| Danish                | [Tummas Joensen](https://github.com/slang123)                                                                                                                                                                                                     |
-| Dutch                 | [RijckAlex](https://github.com/RijckAlex), [Stan M](https://github.com/stxm)                                                                                                                                                                      |
-| French                | [DeepL](https://www.deepl.com/), [mael-chouteau](https://github.com/mael-chouteau), [joandreux](https://github.com/joandreux)                                                                                                                     |
-| German                | [DeepL](https://www.deepl.com/), [barredterra](https://github.com/barredterra), [promexio](https://github.com/promexio), [C2H6-383](https://github.com/C2H6-383), [0xflotus](https://github.com/0xflotus), [Tim](https://github.com/Rocket-Quack) |
-| Gujarati              | [dhruvilxcode](https://github.com/dhruvilxcode), [4silvertooth](https://github.com/4silvertooth)                                                                                                                                                  |
-| Hindi                 | [bnsinghgit](https://github.com/bnsinghgit)                                                                                                                                                                                                       |
-| Indonesian            | [Aji Prakoso](https://github.com/jipraks)                                                                                                                                                                                                         |
-| Korean                | [Isaac-Kwon](https://github.com/Isaac-Kwon)                                                                                                                                                                                                       |
-| Portuguese            | [DeepL](https://www.deepl.com/), [Valdir Amaral](https://github.com/valdir-amaral)                                                                                                                                                                |
-| Spanish               | [talmax1124](https://github.com/talmax1124), [delbertf](https://github.com/delbertf), [Ignacio Chemes](https://github.com/ignaciochemes)                                                                                                          |
-| Swedish               | [papplo](https://github.com/papplo), [Crims-on](https://github.com/Crims-on)                                                                                                                                                                      |
-| Turkish               | Eyuq, [XTechnology-TR](https://github.com/XTechnology-TR)                                                                                                                                                                                         |
+## Upstream (Frappe Books)
 
-## Learn and connect
+Translation contributors, screenshots, install options (Homebrew, Flatpak), docs, and community channels for the original project are all maintained in the upstream repository—read **[github.com/frappe/books](https://github.com/frappe/books)** (especially its README).
 
-- [Telegram Group](https://t.me/frappebooks): Used for discussions and decisions regarding everything Frappe Books.
-- [GitHub Discussions](https://github.com/frappe/books/discussions): Used for discussions around a specific topic.
-- [Documentation](https://docs.frappe.io/books): Official documentation for more details.
+---
+
+## Contact
+
+- **LiveBooks** (this fork): [GitHub Issues](https://github.com/Mencarii/LiveBooks-Desktop/issues).

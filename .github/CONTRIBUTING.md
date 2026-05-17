@@ -1,16 +1,36 @@
-# Contributing to Frappe Books
+# Contributing to LiveBooks Desktop
 
-If you are a Frappe Books user and want to contribute to improving it _without
-writing code_, there are several things you can do:
+LiveBooks Desktop is a fork of [Frappe Books](https://github.com/frappe/books). Thank you for helping improve it.
 
-- **Inform us of issues** you face while using Frappe Books by [raising issues](https://github.com/frappe/books/issues/new).
-- **Add a language** you would like to use Frappe Books in by [contributing translation](https://github.com/frappe/books/wiki/Contributing-Translations).
-- **Share your thoughts** on Frappe Books by joining our [Telegram group](https://t.me/frappebooks).
-- **Use Frappe Books** for your accounting requirements and tell people about it.
+## Who to contact
+
+| Audience                                                   | Channel                                                                                                             |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **Developers** (bugs, ideas, pull requests)                | [GitHub Issues](https://github.com/Mencarii/LiveBooks-Desktop/issues) in this repository, and the guidelines below. |
+| **End users** (using the product, not hacking on the repo) | Email **[ben.cheng@mencarii.com](mailto:ben.cheng@mencarii.com)**                                                   |
+
+## Forks, tweaks, and unofficial builds
+
+LiveBooks Desktop is open source under the **GNU Affero General Public License v3.0 only** (`AGPL-3.0-only`). You may study, modify, and redistribute the software under that license.
+
+**Mencarii / LiveBooks is not responsible** for binaries or deployments you build or run yourself, including modified forks. Those are **at your own risk**: no warranty, no obligation of support, and we do not treat them as the supported “LiveBooks” product unless we publish them. If you ship a derivative, comply with **AGPL-3.0-only** and preserve **upstream notices** (see `NOTICE` and `LICENSE`).
+
+Suggestions and patches for **this** repository are welcome via Issues and PRs.
 
 ---
 
-If you want to contribute code to Frappe Books, please go through the following sections for tips and guidelines:
+## Contributing without code
+
+- **Report issues** using [GitHub Issues](https://github.com/Mencarii/LiveBooks-Desktop/issues) (bugs, confusing UX, documentation gaps).
+- **Translations, upstream community, and credits** live with the original project—see **[github.com/frappe/books](https://github.com/frappe/books)** (README and wiki).
+
+---
+
+## Contributing code
+
+**Local setup:** clone [Mencarii/LiveBooks-Desktop](https://github.com/Mencarii/LiveBooks-Desktop), then follow **Development setup** in the root `README.md` (`yarn`, `yarn dev`, `yarn build`).
+
+If you want to contribute code to LiveBooks Desktop, please go through the following sections for tips and guidelines (inherited from upstream Frappe Books):
 
 - [Code Quality](#code-quality)
 - [Contributing Features](#contributing-features)
@@ -22,7 +42,7 @@ If you want to contribute code to Frappe Books, please go through the following 
 
 ## Code Quality
 
-A few rules of thumb to ensure that you're contributing maintainable code to Frappe Books:
+A few rules of thumb to ensure that you're contributing maintainable code:
 
 - **Readability over succinctness**: If your succinct code takes longer to parse (as
   in read and understand) then it is bad code because we aren’t playing code
@@ -45,7 +65,7 @@ A few rules of thumb to ensure that you're contributing maintainable code to Fra
   if the code is esoteric for the sake of performance.
 - **Rebase don't merge**: Merge commits are ugly and should be used only to
   merge a large PR.
-- **Format your code**: Frappe Books uses `prettier` and `eslint` rules for code
+- **Format your code**: This project uses `prettier` and `eslint` rules for code
   styling and linting, please make sure you have run them and fixed your code
   accordingly before pushing.
 - **Use TypeScript**: Even the `*.vue` files should use TypeScript ([reference](https://vuejs.org/guide/typescript/overview.html#usage-in-single-file-components)).
@@ -56,13 +76,12 @@ When contributing features, these points should be ensured:
 
 ### Invisible until Required
 
-We strive to make Frappe Books as easy and simple to use as possible, and
+We strive to make LiveBooks Desktop as easy and simple to use as possible, and
 Progressive Disclosure is one of the design patterns that enables us to do this.
 
 - **Big Features**: ensure that the feature should be hidden using feature
   flags unless needed by majority users. Example: inventory features are
   hidden until _Enable Inventory_ is checked in the Settings.
-
 - **Small Features**: ensure that they stay hidden until needed until the
   context is relevant. Example: extra fields in the Invoice Items table aren't
   shown unless the User clicks on the Edit Row button.
@@ -92,10 +111,7 @@ through the list. Do not break them without judgement.
 We know documentation and tests are boring, but they're important and we need
 you to add them for large changes.
 
-- **Documentation**: If the feature being added requires an explanation then
-  [documentation](https://docs.frappe.io/books/) should be updated in the
-  [frappe/books_docs](https://github.com/frappe/books_docs) repository.
-  _Add a link to the documentation PR in your feature PR._
+- **Documentation**: If the feature needs user-facing explanation, update **this** repo’s `README` or add focused docs under the repo where appropriate. For anything that tracks upstream behavior or docs, read **[frappe/books](https://github.com/frappe/books)** and link related upstream changes in your PR if helpful.
 - **Tests**: If your features alters business logic then tests should be added.
 
 ### PR Description

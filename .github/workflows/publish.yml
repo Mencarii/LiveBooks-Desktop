@@ -31,6 +31,30 @@ jobs:
           echo $ERR_LOG_URL >> log_creds.txt
           echo $TELEMETRY_URL >> log_creds.txt
 
+      # Day-1 Phase 1.6: fail fast if any mac signing / notarization secret
+      # is missing. An unsigned or non-notarized build that ships under the
+      # frozen productName + appId would roll every user's safeStorage
+      # keychain slot on first launch.
+      - name: Assert macOS signing identity secrets are present
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          missing=""
+          for var in APPLE_ID APPLE_APP_PASSWORD APPLE_TEAM_ID CSC_LINK CSC_KEY_PASSWORD; do
+            if [ -z "${!var}" ]; then
+              missing="$missing $var"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::macOS signing/notarization secrets missing:$missing"
+            echo "::error::Refusing to publish unsigned macOS build (Phase 1.6 signing freeze)."
+            exit 1
+          fi
+
       - name: Run build
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -40,6 +64,9 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           CSC_IDENTITY_AUTO_DISCOVERY: true
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          # Official releases: set repository secret to production API origin (no trailing slash). Same value drives main + renderer.
+          LIVEBOOKS_CLOUD_ORIGIN: ${{ secrets.LIVEBOOKS_CLOUD_ORIGIN }}
+          VITE_LIVEBOOKS_CLOUD_ORIGIN: ${{ secrets.LIVEBOOKS_CLOUD_ORIGIN }}
         run: |
           yarn set version 1.22.18
           yarn build --mac --publish always
@@ -81,6 +108,27 @@ jobs:
           echo $ERR_LOG_URL >> log_creds.txt
           echo $TELEMETRY_URL >> log_creds.txt
 
+      # Day-1 Phase 1.6: see macOS x64 job above.
+      - name: Assert macOS signing identity secrets are present
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          missing=""
+          for var in APPLE_ID APPLE_APP_PASSWORD APPLE_TEAM_ID CSC_LINK CSC_KEY_PASSWORD; do
+            if [ -z "${!var}" ]; then
+              missing="$missing $var"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::macOS signing/notarization secrets missing:$missing"
+            echo "::error::Refusing to publish unsigned macOS build (Phase 1.6 signing freeze)."
+            exit 1
+          fi
+
       - name: Run build
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -90,6 +138,9 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           CSC_IDENTITY_AUTO_DISCOVERY: true
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          # Official releases: set repository secret to production API origin (no trailing slash). Same value drives main + renderer.
+          LIVEBOOKS_CLOUD_ORIGIN: ${{ secrets.LIVEBOOKS_CLOUD_ORIGIN }}
+          VITE_LIVEBOOKS_CLOUD_ORIGIN: ${{ secrets.LIVEBOOKS_CLOUD_ORIGIN }}
         run: |
           yarn set version 1.22.18
           yarn build --mac --publish always
@@ -134,6 +185,8 @@ jobs:
       - name: Run build
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          LIVEBOOKS_CLOUD_ORIGIN: ${{ secrets.LIVEBOOKS_CLOUD_ORIGIN }}
+          VITE_LIVEBOOKS_CLOUD_ORIGIN: ${{ secrets.LIVEBOOKS_CLOUD_ORIGIN }}
         run: |
           yarn set version 1.22.18
           yarn build --linux --publish always
@@ -177,11 +230,34 @@ jobs:
           echo $ERR_LOG_URL >> log_creds.txt
           echo $TELEMETRY_URL >> log_creds.txt
 
+      # Day-1 Phase 1.6: refuse to publish an unsigned Windows build.
+      # An unsigned NSIS installer that still ships under the frozen
+      # `productName` + `appId` would invalidate every Windows user's
+      # DPAPI-wrapped SQLCipher key on first launch.
+      - name: Assert Windows Authenticode secrets are present
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          missing=""
+          for var in WIN_CSC_LINK WIN_CSC_KEY_PASSWORD; do
+            if [ -z "${!var}" ]; then
+              missing="$missing $var"
+            fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Windows Authenticode secrets missing:$missing"
+            echo "::error::Refusing to publish unsigned Windows build (Phase 1.6 signing freeze)."
+            exit 1
+          fi
+
       - name: Run build
         env:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          LIVEBOOKS_CLOUD_ORIGIN: ${{ secrets.LIVEBOOKS_CLOUD_ORIGIN }}
+          VITE_LIVEBOOKS_CLOUD_ORIGIN: ${{ secrets.LIVEBOOKS_CLOUD_ORIGIN }}
         run: yarn build --win --publish always
 
       - name: Tar files
