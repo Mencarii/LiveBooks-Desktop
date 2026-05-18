@@ -161,6 +161,21 @@
                     }}
                     · {{ t`Feed version` }}: {{ row.feed_version }}
                   </span>
+                  <span
+                    v-if="row.ingest_paused_at"
+                    class="
+                      block
+                      text-xs
+                      font-normal
+                      text-amber-700
+                      dark:text-amber-300
+                      mt-1
+                    "
+                  >
+                    {{
+                      t`Bank feeds paused — acknowledge old import batches in Desktop to resume.`
+                    }}
+                  </span>
                 </div>
                 <Button
                   type="secondary"
@@ -636,10 +651,13 @@ import type { Action } from 'fyo/model/types';
 import { t } from 'fyo';
 import { fyo } from 'src/initFyo';
 import { showDialog, showToast } from 'src/utils/interactive';
+import {
+  openLivebooksCloudAccountSecurity,
+} from 'src/utils/livebooksCloud';
 import { ensureLivebooksCloudBookId } from 'src/utils/livebooksCloudBook';
 import {
-  requestPlaidLinkToken,
-  exchangePlaidPublicToken,
+  exchangePlaidPublicTokenWithStepUp,
+  requestPlaidLinkTokenWithStepUp,
 } from 'src/utils/plaidLinkApi';
 import { openPlaidLinkModal } from 'src/utils/plaidLinkClient';
 import {
@@ -653,6 +671,7 @@ import {
 import {
   enablePlaidAccountFeed,
   fetchPlaidFeedsWithStepUp,
+  promptPlaidMfaTotp,
   reopenAckedPlaidImportBatches,
   type PlaidFeedItemRow,
 } from 'src/utils/plaidBankFeedsApi';
@@ -797,6 +816,16 @@ export default defineComponent({
     void this.bootstrap();
   },
   methods: {
+    plaidMfaPromptTotp() {
+      return promptPlaidMfaTotp(
+        t`Enter your LiveBooks Cloud authenticator or backup code to continue.`
+      );
+    },
+    plaidLinkPromptTotp() {
+      return promptPlaidMfaTotp(
+        t`Enter your LiveBooks Cloud authenticator or backup code to link a bank account.`
+      );
+    },
     manualBankLabel(m: { name: string; accountName?: string }) {
       return accountDisplayName(m);
     },
@@ -1030,7 +1059,8 @@ export default defineComponent({
       const res = await disconnectPlaidAccountFeedLocalAndRemote(
         this.bookId,
         row.item_id,
-        acc.account_id
+        acc.account_id,
+        { promptTotp: () => this.plaidMfaPromptTotp() }
       );
       if (!res.ok) {
         showToast({ type: 'error', message: res.error });
@@ -1063,7 +1093,8 @@ export default defineComponent({
         const en = await enablePlaidAccountFeed(
           this.bookId,
           row.item_id,
-          acc.account_id
+          acc.account_id,
+          { promptTotp: () => this.plaidMfaPromptTotp() }
         );
         if (!en.ok) {
           showToast({ type: 'error', message: en.error ?? t`Could not reactivate feed.` });
@@ -1115,7 +1146,7 @@ export default defineComponent({
         const res = await reopenAckedPlaidImportBatches(
           this.bookId,
           row.item_id,
-          { days: 30 }
+          { days: 30, promptTotp: () => this.plaidMfaPromptTotp() }
         );
         if (!res.ok) {
           showToast({
@@ -1386,7 +1417,8 @@ export default defineComponent({
       const disc = await disconnectPlaidAccountFeedLocalAndRemote(
         this.bookId,
         row.item_id,
-        acc.account_id
+        acc.account_id,
+        { promptTotp: () => this.plaidMfaPromptTotp() }
       );
       if (!disc.ok) {
         showToast({ type: 'error', message: disc.error });
@@ -1469,7 +1501,8 @@ export default defineComponent({
       const disc = await disconnectPlaidAccountFeedLocalAndRemote(
         this.bookId,
         row.item_id,
-        acc.account_id
+        acc.account_id,
+        { promptTotp: () => this.plaidMfaPromptTotp() }
       );
       if (!disc.ok) {
         showToast({ type: 'error', message: disc.error });
@@ -1708,7 +1741,8 @@ export default defineComponent({
         const en = await enablePlaidAccountFeed(
           this.bookId,
           itemId,
-          acc.account_id
+          acc.account_id,
+          { promptTotp: () => this.plaidMfaPromptTotp() }
         );
         if (!en.ok) {
           showToast({
@@ -1737,10 +1771,20 @@ export default defineComponent({
       const bookId = this.bookId;
       this.plaidLinkBusy = true;
       try {
-        const { linkToken, error: tokenErr } = await requestPlaidLinkToken(
-          bookId,
-          itemId ? { itemId } : undefined
-        );
+        const { linkToken, error: tokenErr, mfaNotConfigured } =
+          await requestPlaidLinkTokenWithStepUp(bookId, {
+            itemId,
+            promptTotp: () => this.plaidLinkPromptTotp(),
+          });
+        if (mfaNotConfigured) {
+          showToast({
+            type: 'warning',
+            message: t`Set up two-factor authentication on LiveBooks Cloud before linking a bank.`,
+            duration: 'long',
+          });
+          openLivebooksCloudAccountSecurity();
+          return;
+        }
         if (tokenErr || !linkToken) {
           showToast({
             type: 'error',
@@ -1751,7 +1795,18 @@ export default defineComponent({
         await openPlaidLinkModal({
           linkToken,
           onSuccess: async (publicToken) => {
-            const ex = await exchangePlaidPublicToken(bookId, publicToken);
+            const ex = await exchangePlaidPublicTokenWithStepUp(
+              bookId,
+              publicToken,
+              { promptTotp: () => this.plaidLinkPromptTotp() }
+            );
+            if (ex.mfaNotConfigured) {
+              openLivebooksCloudAccountSecurity();
+              throw new Error(
+                ex.error ??
+                  t`Set up two-factor authentication on LiveBooks Cloud first.`
+              );
+            }
             if (!ex.ok) {
               throw new Error(ex.error ?? t`Could not save bank connection.`);
             }
