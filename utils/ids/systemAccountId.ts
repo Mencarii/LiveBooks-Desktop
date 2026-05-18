@@ -1,5 +1,5 @@
 /**
- * Day-1 Phase 3.4 C1 — deterministic system COA account ids (UUID v5).
+ * Deterministic system COA account ids (UUID v5).
  *
  * Same language-neutral seed path yields the same UUID on every machine,
  * so system default accounts reconcile across locales after translation.

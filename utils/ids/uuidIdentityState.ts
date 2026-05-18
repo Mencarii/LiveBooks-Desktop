@@ -1,5 +1,5 @@
 /**
- * Day-1 Phase 3.0 — schema migration version tracking.
+ * schema migration version tracking.
  */
 
 import { isUuidDocId } from 'utils/ids';

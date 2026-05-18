@@ -6,7 +6,7 @@ import { isNetworkError } from './helpers';
 
 export default function registerAutoUpdaterListeners(main: Main) {
   autoUpdater.autoDownload = false;
-  // Stable releases: do not install prerelease artifacts unless explicitly enabled (internal QA).
+  // Stable releases: do not install prerelease artifacts unless explicitly enabled when LIVEBOOKS_UPDATER_ALLOW_PRERELEASE is set.
   const allowPrerelease =
     process.env.LIVEBOOKS_UPDATER_ALLOW_PRERELEASE === 'true' ||
     process.env.LIVEBOOKS_UPDATER_ALLOW_PRERELEASE === '1';

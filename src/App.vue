@@ -358,7 +358,7 @@ export default defineComponent({
       await this.setDesk(filePath);
     },
     async handleConnectionFailed(error: Error, actionSymbol: symbol) {
-      // Day-1 Phase 0.1 / 2.2: keychain corruption / unavailability MUST
+      // keychain corruption / unavailability MUST
       // surface the RecoveryMode screen. Never fall through to a generic
       // dialog (which used to silently re-key via getOrCreateDatabaseKey
       // on next open). RecoveryMode lives at the App-screen level rather
@@ -383,7 +383,7 @@ export default defineComponent({
       throw error;
     },
     /**
-     * Day-1 Phase 2.2 — RecoveryMode succeeded. The main process has
+     * RecoveryMode succeeded. The main process has
      * already persisted the recovered SQLCipher key into the OS keychain
      * AND verified that the key opens the .db (via
      * +databaseManager.connectToDatabase+ inside the IPC handler). All we

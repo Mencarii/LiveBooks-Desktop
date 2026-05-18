@@ -2,7 +2,7 @@ import test from 'tape';
 import { DatabaseError } from 'fyo/utils/errors';
 
 /**
- * Mirrors fyo/demux/db.ts #handleDBCall error shaping (Phase 0.3).
+ * Mirrors fyo/demux/db.ts #handleDBCall error shaping .
  */
 function databaseErrorFromBackendResponse(error: {
   name: string;

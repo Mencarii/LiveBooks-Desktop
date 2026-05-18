@@ -1,5 +1,5 @@
 /**
- * Day-1 Phase 3.1 — document identity primitives.
+ * document identity primitives.
  *
  * Generates v4 UUIDs without importing Node's `crypto` module (which
  * Vite externalizes in the renderer). Resolves the crypto API at
@@ -50,7 +50,7 @@ export function isUuidDocId(value: unknown): value is string {
   return typeof value === 'string' && UUID_RE.test(value);
 }
 
-/** Stable device id for sync (Phase 4); not the legacy base36 random string. */
+/** Stable device id for sync ; not the legacy base36 random string. */
 export function generateDeviceId(): string {
   return uuidV4();
 }
