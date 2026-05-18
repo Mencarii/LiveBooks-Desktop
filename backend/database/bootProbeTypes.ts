@@ -1,8 +1,4 @@
-/**
- * Day-1 Phase 2.1 — boot probe result codes (P0–P5 matrix).
- *
- * @see plan day-1_sync_foundation §2.1
- */
+/** Boot probe result codes (P0–P5 matrix). */
 
 export type BootProbeCode =
   | 'OK'

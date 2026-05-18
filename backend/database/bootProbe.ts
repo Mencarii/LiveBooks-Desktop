@@ -1,7 +1,7 @@
 /**
- * Day-1 Phase 2.1 — linear boot probe before DB_CONNECT.
+ * linear boot probe before DB_CONNECT.
  *
- * Implements the P0–P5 matrix from the Day-1 plan without ever writing a
+ * Implements the P0–P5 matrix without ever writing a
  * new SQLCipher key on the read path.
  */
 

@@ -1,5 +1,5 @@
 /**
- * Day-1 Phase 1.6 — frozen signing identity.
+ * Frozen signing identity.
  *
  * macOS `safeStorage` (Keychain) and Windows `safeStorage` (DPAPI) entries
  * are scoped to the app's bundle id + code-signing identity. Changing

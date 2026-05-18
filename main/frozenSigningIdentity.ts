@@ -1,5 +1,5 @@
 /**
- * Day-1 Phase 1.6 — runtime mirror of `build/signingIdentity.mjs`.
+ * runtime mirror of `build/signingIdentity.mjs`.
  *
  * The `safeStorage`-backed SQLCipher key store is scoped to the app's
  * bundle id + code-signing identity. A silent change to either at build

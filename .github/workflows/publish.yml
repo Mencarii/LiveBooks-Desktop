@@ -31,7 +31,7 @@ jobs:
           echo $ERR_LOG_URL >> log_creds.txt
           echo $TELEMETRY_URL >> log_creds.txt
 
-      # Day-1 Phase 1.6: fail fast if any mac signing / notarization secret
+      # Fail fast if any mac signing / notarization secret
       # is missing. An unsigned or non-notarized build that ships under the
       # frozen productName + appId would roll every user's safeStorage
       # keychain slot on first launch.
@@ -51,7 +51,7 @@ jobs:
           done
           if [ -n "$missing" ]; then
             echo "::error::macOS signing/notarization secrets missing:$missing"
-            echo "::error::Refusing to publish unsigned macOS build (Phase 1.6 signing freeze)."
+            echo "::error::Refusing to publish unsigned macOS build (signing identity freeze)."
             exit 1
           fi
 
@@ -108,7 +108,7 @@ jobs:
           echo $ERR_LOG_URL >> log_creds.txt
           echo $TELEMETRY_URL >> log_creds.txt
 
-      # Day-1 Phase 1.6: see macOS x64 job above.
+      # See macOS x64 job above.
       - name: Assert macOS signing identity secrets are present
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -125,7 +125,7 @@ jobs:
           done
           if [ -n "$missing" ]; then
             echo "::error::macOS signing/notarization secrets missing:$missing"
-            echo "::error::Refusing to publish unsigned macOS build (Phase 1.6 signing freeze)."
+            echo "::error::Refusing to publish unsigned macOS build (signing identity freeze)."
             exit 1
           fi
 
@@ -230,7 +230,7 @@ jobs:
           echo $ERR_LOG_URL >> log_creds.txt
           echo $TELEMETRY_URL >> log_creds.txt
 
-      # Day-1 Phase 1.6: refuse to publish an unsigned Windows build.
+      # Refuse to publish an unsigned Windows build.
       # An unsigned NSIS installer that still ships under the frozen
       # `productName` + `appId` would invalidate every Windows user's
       # DPAPI-wrapped SQLCipher key on first launch.
@@ -247,7 +247,7 @@ jobs:
           done
           if [ -n "$missing" ]; then
             echo "::error::Windows Authenticode secrets missing:$missing"
-            echo "::error::Refusing to publish unsigned Windows build (Phase 1.6 signing freeze)."
+            echo "::error::Refusing to publish unsigned Windows build (signing identity freeze)."
             exit 1
           fi
 

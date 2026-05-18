@@ -11,7 +11,7 @@ import {
  * This workaround allows an environment variable to be added to the electron-builder.yml config
  * collection. See: https://github.com/electron-userland/electron-builder/issues/7812
  *
- * Day-1 Phase 1.6: `productName` and `appId` are sourced from
+ * `productName` and `appId` are sourced from
  * `build/signingIdentity.mjs` so the values that the main process
  * runtime-asserts against can never drift from the values
  * electron-builder bakes into the .app bundle / installer.

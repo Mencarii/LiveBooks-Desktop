@@ -48,7 +48,7 @@ if (!app.requestSingleInstanceLock()) {
   process.exit(0);
 }
 
-// Day-1 Phase 1.6: refuse to boot a packaged build whose signing
+// refuse to boot a packaged build whose signing
 // identity drifted from the frozen contract. A drift would silently
 // invalidate every user's safeStorage-wrapped SQLCipher key.
 assertFrozenSigningIdentityForPackagedBuild();

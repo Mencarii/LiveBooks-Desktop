@@ -1,5 +1,5 @@
 /**
- * Day-1 Phase 1.6 — enforce that the runtime mirror
+ * enforce that the runtime mirror
  * (`main/frozenSigningIdentity.ts`) stays in lockstep with the
  * build-time source of truth (`build/signingIdentity.mjs`).
  *

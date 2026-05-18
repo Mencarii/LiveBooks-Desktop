@@ -1,5 +1,5 @@
 /**
- * Day-1 Phase 3.0–3.4 — atomic UUID identity migration.
+ * 3.4 — atomic UUID identity migration.
  *
  * Runs once per ledger file inside a single SQLite transaction. Preserves
  * PlaidBankAccountMap row PKs; rewrites chartAccount FKs when Account names

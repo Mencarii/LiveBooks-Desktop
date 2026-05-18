@@ -1,6 +1,6 @@
 import test from 'tape';
 
-test('boot probe codes include Phase 2 matrix values', (t) => {
+test('boot probe codes include expected matrix values', (t) => {
   const codes = [
     'OK',
     'KEYCHAIN_UNAVAILABLE',
