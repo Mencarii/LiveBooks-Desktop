@@ -368,6 +368,7 @@ import { fyo } from 'src/initFyo';
 import { showToast } from 'src/utils/interactive';
 import { LIVEBOOKS_CLOUD_SESSION_APP_REFRESH_EVENT } from 'src/utils/livebooksCloud';
 import { ensureLivebooksCloudBookId } from 'src/utils/livebooksCloudBook';
+import { promptPlaidMfaTotp } from 'src/utils/plaidBankFeedsApi';
 import {
   fetchCloudStatementFiles,
   syncCloudStatementFiles,
@@ -795,7 +796,16 @@ export default defineComponent({
         return;
       }
       this.cloudMsg = t`Syncing…`;
-      const { ok, error, data } = await syncCloudStatementFiles(this.cloudBookId);
+      const { ok, error, data } = await syncCloudStatementFiles(
+        this.cloudBookId,
+        undefined,
+        {
+          promptTotp: () =>
+            promptPlaidMfaTotp(
+              t`Enter your LiveBooks Cloud authenticator or backup code to sync bank statements.`
+            ),
+        }
+      );
       if (!ok) {
         this.cloudMsg = error ?? t`Sync failed`;
         showToast({ type: 'error', message: this.cloudMsg });
