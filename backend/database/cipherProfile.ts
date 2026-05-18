@@ -128,10 +128,48 @@ export function probeDatabaseCipherMode(
 }
 
 /**
+ * Verify that +hexKey+ opens +dbPath+ (any supported cipher profile) before
+ * cloud escrow upload. Uses a short-lived readonly connection.
+ */
+export function verifyDatabaseOpensWithHexKey(
+  dbPath: string,
+  hexKey: string
+): boolean {
+  if (dbPath === ':memory:') {
+    return true;
+  }
+
+  const mode = probeDatabaseCipherMode(dbPath, hexKey);
+  if (!mode) {
+    return false;
+  }
+
+  const profile = PROBE_ORDER.find((p) => p.mode === mode);
+  if (!profile) {
+    return false;
+  }
+
+  let db: BetterSQLite3.Database | undefined;
+  try {
+    db = new BetterSQLite3(dbPath, { readonly: true });
+    profile.apply(db, hexKey);
+    const row = db.prepare('SELECT count(*) AS c FROM sqlite_master').get() as {
+      c: number;
+    };
+    return typeof row?.c === 'number';
+  } catch {
+    return false;
+  } finally {
+    db?.close();
+  }
+}
+
+/**
  * Verify a on-disk backup opens with the canonical target cipher profile.
  * Prefer this over {@link probeDatabaseCipherMode} for post-copy backups:
  * the file was produced from an already-unlocked target-profile database.
  */
+
 export function verifyTargetCipherBackup(
   dbPath: string,
   hexKey: string
