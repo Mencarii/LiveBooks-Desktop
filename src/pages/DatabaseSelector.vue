@@ -317,8 +317,9 @@ import Loading from 'src/components/Loading.vue';
 import Modal from 'src/components/Modal.vue';
 import { fyo } from 'src/initFyo';
 import { handleErrorWithDialog } from 'src/errorHandling';
-import { showDialog } from 'src/utils/interactive';
+import { showDialog, showToast } from 'src/utils/interactive';
 import { updateConfigFiles } from 'src/utils/misc';
+import { purgeCloudPlaidItemsForInstance } from 'src/utils/livebooksCloudBook';
 import { deleteDb, getSavePath, getSelectedFilePath } from 'src/utils/ui';
 import type { ConfigFilesWithModified } from 'utils/types';
 import { defineComponent } from 'vue';
@@ -385,6 +386,15 @@ export default defineComponent({
           {
             label: this.t`Yes`,
             async action() {
+              const purge = await purgeCloudPlaidItemsForInstance(file.id);
+              if (!purge.ok && !purge.skipped) {
+                showToast({
+                  message:
+                    purge.error ??
+                    t`Could not disconnect bank feeds in LiveBooks Cloud. The local company file will still be deleted.`,
+                  type: 'warning',
+                });
+              }
               await deleteDb(file.dbPath);
               await setFiles();
             },

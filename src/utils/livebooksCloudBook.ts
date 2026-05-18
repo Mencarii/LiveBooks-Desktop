@@ -120,3 +120,60 @@ export async function ensureLivebooksCloudBookId(
     message: msg ?? `Cloud book lookup failed (HTTP ${String(lookup.status)}).`,
   };
 }
+
+/**
+ * Best-effort: revoke all Plaid Items for a company before local DB delete.
+ * Skips when not signed in or the cloud book does not exist.
+ */
+export async function purgeCloudPlaidItemsForInstance(
+  instanceId: string
+): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+  const { signedIn } = await getLivebooksCloudSessionSummary();
+  if (!signedIn) {
+    return { ok: true, skipped: true };
+  }
+
+  const lookup = await livebooksCloudRequest({
+    method: 'GET',
+    path: `/api/v1/books/lookup?instance_id=${encodeURIComponent(instanceId)}`,
+  });
+
+  if (lookup.status === 404) {
+    return { ok: true, skipped: true };
+  }
+
+  if (isLivebooksCloudNetworkFailure(lookup)) {
+    return {
+      ok: false,
+      error: livebooksCloudUnreachableUserMessage(),
+    };
+  }
+
+  if (!lookup.ok || lookup.data == null || typeof lookup.data !== 'object') {
+    const msg =
+      lookup.data && typeof lookup.data === 'object' && 'message' in lookup.data
+        ? String((lookup.data as { message: unknown }).message)
+        : `Cloud book lookup failed (HTTP ${String(lookup.status)}).`;
+    return { ok: false, error: msg };
+  }
+
+  const bookId = (lookup.data as { book_id?: unknown }).book_id;
+  if (typeof bookId !== 'string' || bookId.length === 0) {
+    return { ok: false, error: 'Cloud book lookup returned no book_id.' };
+  }
+
+  const purge = await livebooksCloudRequest({
+    method: 'DELETE',
+    path: `/api/v1/books/${encodeURIComponent(bookId)}/plaid/items`,
+  });
+
+  if (purge.ok || purge.status === 204) {
+    return { ok: true };
+  }
+
+  const err =
+    purge.data && typeof purge.data === 'object' && 'message' in purge.data
+      ? String((purge.data as { message: unknown }).message)
+      : `Plaid purge failed (HTTP ${String(purge.status)}).`;
+  return { ok: false, error: err };
+}
