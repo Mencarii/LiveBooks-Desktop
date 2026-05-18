@@ -1,6 +1,7 @@
 import { DatabaseError, NotImplemented } from 'fyo/utils/errors';
 import { SchemaMap } from 'schemas/types';
 import { DatabaseDemuxBase, DatabaseMethod } from 'utils/db/types';
+import { withSqliteBusyRetry } from 'utils/database/sqliteBusyRetry';
 import { BackendResponse } from 'utils/ipc/types';
 
 export class DatabaseDemux extends DatabaseDemuxBase {
@@ -11,7 +12,7 @@ export class DatabaseDemux extends DatabaseDemuxBase {
   }
 
   async #handleDBCall(func: () => Promise<BackendResponse>): Promise<unknown> {
-    const response = await func();
+    const response = await withSqliteBusyRetry(func);
 
     if (response.error?.name) {
       const { name, message, stack, code } = response.error;
@@ -19,7 +20,7 @@ export class DatabaseDemux extends DatabaseDemuxBase {
       dberror.stack = stack;
       // Preserve main-process error.code (e.g. KEYCHAIN_CORRUPTED) so the
       // renderer can route to /recovery instead of treating every failure as
-      // a generic DatabaseError. See Day-1 Phase 0.3.
+      // a generic DatabaseError. See
       if (typeof code === 'string' && code.length > 0) {
         (dberror as DatabaseError & { code?: string }).code = code;
       }

@@ -39,6 +39,31 @@ module.exports = {
   ],
   overrides: [
     {
+      files: ['models/**/*.{ts,js}', 'src/**/*.{ts,js}', 'fyo/**/*.{ts,js}'],
+      excludedFiles: [
+        'fyo/model/doc.ts',
+        'fyo/core/dbHandler.ts',
+        '**/*.spec.ts',
+      ],
+      rules: {
+        'no-restricted-syntax': [
+          'error',
+          {
+            selector:
+              "MemberExpression[property.name='knex'][object.type!='ThisExpression']",
+            message:
+              'Use Doc.sync() or DatabaseHandler — raw knex only in backend/database, backend/patches, or jobs with explicit modified meta.',
+          },
+          {
+            selector:
+              "CallExpression[callee.property.name='update'][callee.object.name='db']",
+            message:
+              'Avoid fyo.db.update in product code — use Doc.sync() or include modified meta explicitly.',
+          },
+        ],
+      },
+    },
+    {
       files: ['*.vue'],
       rules: {
         '@typescript-eslint/no-misused-promises': 'off',

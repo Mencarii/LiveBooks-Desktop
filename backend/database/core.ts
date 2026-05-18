@@ -68,6 +68,9 @@ export default class DatabaseCore extends DatabaseBase {
             applyTargetCipherProfile(sqliteDb, encryptionKey);
           }
           sqliteDb.pragma('foreign_keys = ON');
+          sqliteDb.pragma('journal_mode = WAL');
+          sqliteDb.pragma('synchronous = NORMAL');
+          sqliteDb.pragma('busy_timeout = 10000');
           done(null, db);
         },
       },
@@ -138,19 +141,31 @@ export default class DatabaseCore extends DatabaseBase {
     }
 
     await config.pre?.();
-    for (const schemaName of create) {
-      await this.#createTable(schemaName);
-    }
 
-    for (const config of alter) {
-      await this.#alterTable(config);
-    }
+    // One transaction per migrate pass where SQLite allows DDL in a txn.
+    // File backup in DatabaseManager remains the recovery path on power loss.
+    await this.knex!.transaction(async (trx) => {
+      const priorKnex = this.knex;
+      this.knex = trx as Knex;
+      try {
+        for (const schemaName of create) {
+          await this.#createTable(schemaName);
+        }
 
-    if (!hasSingleValueTable) {
-      singlesConfig = await this.#getSinglesUpdateList();
-    }
+        for (const alterConfig of alter) {
+          await this.#alterTable(alterConfig);
+        }
 
-    await this.#initializeSingles(singlesConfig);
+        if (!hasSingleValueTable) {
+          singlesConfig = await this.#getSinglesUpdateList();
+        }
+
+        await this.#initializeSingles(singlesConfig);
+      } finally {
+        this.knex = priorKnex;
+      }
+    });
+
     await config.post?.();
   }
 

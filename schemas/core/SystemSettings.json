@@ -170,6 +170,14 @@
       "fieldtype": "Text",
       "hidden": true,
       "description": "Per-company cached FX rates (JSON) for offline use."
+    },
+    {
+      "fieldname": "lastSuccessfulPlaidApplyAt",
+      "label": "Last successful Plaid apply",
+      "fieldtype": "Datetime",
+      "hidden": true,
+      "readOnly": true,
+      "description": "UTC ISO timestamp updated after a Plaid batch is applied and acked."
     }
   ],
   "quickEditFields": [

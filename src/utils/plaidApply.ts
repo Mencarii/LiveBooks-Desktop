@@ -21,6 +21,7 @@
  */
 
 import { fyo } from 'src/initFyo';
+import { setLastSuccessfulPlaidApplyAt } from 'src/utils/plaidApplyBookmark';
 import {
   ackImportBatch,
   fetchImportBatchPayload,
@@ -924,6 +925,10 @@ export async function applyPlaidBatchWithPayload(
     }
 
     await deleteApplyJournal(publicId).catch(() => undefined);
+    await setLastSuccessfulPlaidApplyAt(
+      fyo,
+      new Date().toISOString()
+    ).catch(() => undefined);
 
     return {
       ok: true,

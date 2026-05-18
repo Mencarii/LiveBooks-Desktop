@@ -27,6 +27,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify patch immutability
+        run: bash scripts/verify-patch-immutability.sh
+
       - name: Install Dependencies
         run: yarn
 

@@ -250,6 +250,42 @@
           }}
         </div>
 
+        <div
+          v-if="accountKind === 'plaid' && plaidCatchUpBlocked"
+          class="
+            mb-4
+            border border-red-300
+            dark:border-red-700
+            bg-red-50
+            dark:bg-red-900/20
+            rounded
+            p-3
+            text-sm
+          "
+        >
+          <div class="font-medium mb-1 text-red-900 dark:text-red-100">
+            {{ t`Bank feed catch-up paused` }}
+          </div>
+          <div class="text-red-900 dark:text-red-100">
+            {{ plaidCatchUpBlocked.message }}
+          </div>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <Button type="secondary" @click="goImportBankFile">
+              {{ t`Import CSV/OFX` }}
+            </Button>
+            <Button type="primary" @click="pullPlaidAnyway">
+              {{ t`Pull anyway` }}
+            </Button>
+          </div>
+        </div>
+
+        <div
+          v-if="accountKind === 'plaid' && plaidCatchUpWarning"
+          class="mb-4 text-sm text-amber-800 dark:text-amber-200"
+        >
+          {{ plaidCatchUpWarning }}
+        </div>
+
         <!-- Recent apply failures (Plaid only). -->
         <div
           v-if="accountKind === 'plaid' && recentApplyFailures.length"
@@ -828,8 +864,13 @@ import {
   type PlaidApplyOutcome,
   type RetractedMatchedRow,
 } from 'src/utils/plaidApply';
+import { getLastSuccessfulPlaidApplyAt } from 'src/utils/plaidApplyBookmark';
+import {
+  evaluatePlaidCatchUp,
+  oldestCreatedAt,
+} from 'src/utils/plaidCatchUpGuard';
 import { bulkFetchImportBatchPayloads } from 'src/utils/plaidBankFeedsApi';
-import { fyo } from 'src/initFyo';
+import { promptTotpCode } from 'src/utils/promptTotpCode';
 import {
   categorizeAndAddLine,
   findExactMatchCandidate,
@@ -897,6 +938,13 @@ export default defineComponent({
       summaryPendingAtBank: 0,
       plaidFeedItemsCache: [] as PlaidFeedItemRow[],
       ledgerAccountLabel: '' as string,
+      plaidCatchUpBlocked: null as {
+        allow: false;
+        reason: string;
+        message: string;
+      } | null,
+      plaidCatchUpWarning: '' as string,
+      plaidCatchUpOverride: false,
     };
   },
   computed: {
@@ -987,6 +1035,12 @@ export default defineComponent({
     t,
     categoryLabel(acc: CategoryOption) {
       return accountDisplayName(acc);
+    },
+    async promptBankFeedTotp(): Promise<string | null> {
+      return await promptTotpCode({
+        title: t`Authenticator code`,
+        detail: t`Enter your LiveBooks Cloud authenticator or backup code to download bank transactions.`,
+      });
     },
     async loadLedgerAccountLabel() {
       try {
@@ -1381,7 +1435,11 @@ export default defineComponent({
           const { batches, error } = await fetchPendingImportBatches(
             this.bookId,
             m.plaidItemId,
-            { plaidAccountId: m.plaidAccountId, limit: 30 }
+            {
+              plaidAccountId: m.plaidAccountId,
+              limit: 30,
+              promptTotp: () => this.promptBankFeedTotp(),
+            }
           );
           if (error) {
             this.batchesError = error;
@@ -1424,8 +1482,37 @@ export default defineComponent({
      * `recentApplyFailures` banner; we don't bubble per-batch toasts because
      * this runs implicitly when the user lands on the page.
      */
+    async ensurePlaidCatchUpAllowed(): Promise<boolean> {
+      if (this.plaidCatchUpOverride) {
+        return true;
+      }
+      const last = await getLastSuccessfulPlaidApplyAt(fyo);
+      const decision = evaluatePlaidCatchUp({
+        lastSuccessfulPlaidApplyAt: last,
+        oldestPendingCreatedAt: oldestCreatedAt(
+          this.mergedBatches.map((b) => b.created_at)
+        ),
+        pendingBatchCount: this.mergedBatches.length,
+      });
+      if (!decision.allow) {
+        this.plaidCatchUpBlocked = decision;
+        this.plaidCatchUpWarning = '';
+        return false;
+      }
+      this.plaidCatchUpBlocked = null;
+      this.plaidCatchUpWarning = decision.warning ?? '';
+      return true;
+    },
+    async pullPlaidAnyway() {
+      this.plaidCatchUpOverride = true;
+      this.plaidCatchUpBlocked = null;
+      await this.pullPlaidBatchesNow();
+    },
     async autoApplyPendingBatches() {
       if (!this.bookId || !this.mergedBatches.length) {
+        return;
+      }
+      if (!(await this.ensurePlaidCatchUpAllowed())) {
         return;
       }
       const applicable = this.mergedBatches.filter(
@@ -1448,7 +1535,8 @@ export default defineComponent({
           );
           const { batches, error } = await bulkFetchImportBatchPayloads(
             this.bookId,
-            ids
+            ids,
+            { promptTotp: () => this.promptBankFeedTotp() }
           );
           if (error || !batches.length) {
             // Fall back to per-batch fetch so a transient bulk failure doesn't
@@ -1524,6 +1612,9 @@ export default defineComponent({
     },
     async pullPlaidBatchesNow() {
       if (!this.bookId || this.accountKind !== 'plaid') {
+        return;
+      }
+      if (!(await this.ensurePlaidCatchUpAllowed())) {
         return;
       }
       this.manualPullBusy = true;

@@ -1,4 +1,9 @@
 import { Fyo, t } from 'fyo';
+import {
+  CLOUD_FOLDER_DB_WARNING,
+  isCloudSyncFolderPath,
+} from 'utils/database/cloudStoragePath';
+import { withSqliteBusyRetry } from 'utils/database/sqliteBusyRetry';
 
 type Conn = {
   countryCode: string;
@@ -41,7 +46,18 @@ export async function connectToDatabase(
   countryCode?: string
 ): Promise<Conn> {
   try {
-    return { countryCode: await fyo.db.connectToDatabase(dbPath, countryCode) };
+    const countryCodeResult = await withSqliteBusyRetry(() =>
+      fyo.db.connectToDatabase(dbPath, countryCode)
+    );
+    if (isCloudSyncFolderPath(dbPath)) {
+      const { showToast } = await import('src/utils/interactive');
+      showToast({
+        type: 'warning',
+        message: t`${CLOUD_FOLDER_DB_WARNING}`,
+        duration: 'long',
+      });
+    }
+    return { countryCode: countryCodeResult };
   } catch (error) {
     if (!(error instanceof Error)) {
       throw error;
@@ -59,7 +75,7 @@ export async function handleDatabaseConnectionError(
   error: Error,
   dbPath: string
 ) {
-  // Day-1 Phase 0.1 / 0.3: keychain failures must route to /recovery.
+  // keychain failures must route to /recovery.
   // We MUST NOT silently re-key the encrypted .db (the legacy
   // `getOrCreateDatabaseKey` bug); that is what bricks customer data.
   if (isKeychainRecoveryError(error)) {

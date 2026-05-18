@@ -42,6 +42,8 @@ If you want to contribute code to LiveBooks Desktop, please go through the follo
 
 ## Code Quality
 
+**Data mutations:** route business writes through `Doc.sync()` / `DatabaseHandler`. Raw Knex or partial `fyo.db.update` is allowed only in `backend/database/**`, `backend/patches/**`, or `jobs/**` with explicit `modified` / `modifiedBy` meta. See `docs/patch-immutability.md`.
+
 A few rules of thumb to ensure that you're contributing maintainable code:
 
 - **Readability over succinctness**: If your succinct code takes longer to parse (as
