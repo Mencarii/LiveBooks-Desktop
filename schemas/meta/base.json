@@ -32,6 +32,15 @@
       "required": true,
       "meta": true,
       "section": "System"
+    },
+    {
+      "fieldname": "rowVersion",
+      "label": "Row Version",
+      "fieldtype": "Int",
+      "default": 0,
+      "meta": true,
+      "readOnly": true,
+      "section": "System"
     }
   ]
 }

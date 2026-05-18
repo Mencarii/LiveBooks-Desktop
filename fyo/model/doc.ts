@@ -599,6 +599,24 @@ export class Doc extends Observable<DocValue | Doc[]> {
   _updateModifiedMetaValues() {
     this.modifiedBy = this.fyo.auth.session.user || DEFAULT_USER;
     this.modified = new Date();
+    if (this.fieldMap.rowVersion) {
+      const current = Number(this.rowVersion ?? 0);
+      this.rowVersion = Number.isFinite(current) ? current + 1 : 1;
+    }
+  }
+
+  _touchDirtyChildModifiedMeta() {
+    for (const { fieldname } of this.tableFields) {
+      const children = this[fieldname] as Doc[] | undefined;
+      if (!Array.isArray(children)) {
+        continue;
+      }
+      for (const child of children) {
+        if (child instanceof Doc && child._dirty) {
+          child._updateModifiedMetaValues();
+        }
+      }
+    }
   }
 
   async load() {
@@ -869,6 +887,7 @@ export class Doc extends Observable<DocValue | Doc[]> {
 
   async _insert() {
     this._setBaseMetaValues();
+    this._touchDirtyChildModifiedMeta();
     await this._preSync();
     await setName(this, this.fyo);
 
@@ -888,6 +907,7 @@ export class Doc extends Observable<DocValue | Doc[]> {
   async _update() {
     await this._validateDbNotModified();
     this._updateModifiedMetaValues();
+    this._touchDirtyChildModifiedMeta();
     await this._preSync();
 
     const data = this.getValidDict(false, true);

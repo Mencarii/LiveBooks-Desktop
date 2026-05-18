@@ -1,6 +1,7 @@
 import { SingleValue } from 'backend/database/types';
 import { Fyo } from 'fyo';
 import { DatabaseDemux } from 'fyo/demux/db';
+import { DEFAULT_USER } from 'fyo/utils/consts';
 import { ValueError } from 'fyo/utils/errors';
 import Observable from 'fyo/utils/observable';
 import { translateSchema } from 'fyo/utils/translation';
@@ -20,6 +21,7 @@ import {
 } from 'utils/db/types';
 import { schemaTranslateables } from 'utils/translationHelpers';
 import { LanguageMap } from 'utils/types';
+import { MUTATION_LOG_SKIP_SCHEMAS } from 'utils/sync/localMutationOutbox';
 import { recordLocalMutation } from './localMutationLogger';
 import { Converter } from './converter';
 import {
@@ -219,7 +221,24 @@ export class DatabaseHandler extends DatabaseBase {
   }
 
   async update(schemaName: string, docValueMap: DocValueMap): Promise<void> {
-    const rawValueMap = this.converter.toRawValueMap(schemaName, docValueMap);
+    let rawValueMap = this.converter.toRawValueMap(
+      schemaName,
+      docValueMap
+    ) as RawValueMap;
+    const schema = this.#schemaMap[schemaName];
+    if (
+      schema &&
+      !schema.isSingle &&
+      !MUTATION_LOG_SKIP_SCHEMAS.has(schemaName) &&
+      rawValueMap.modified === undefined
+    ) {
+      const now = new Date().toISOString();
+      rawValueMap = {
+        ...rawValueMap,
+        modified: now,
+        modifiedBy: this.#fyo.auth.session?.user || DEFAULT_USER,
+      };
+    }
     await this.#demux.call('update', schemaName, rawValueMap);
     const docName = String(docValueMap.name ?? rawValueMap.name ?? '');
     if (docName) {

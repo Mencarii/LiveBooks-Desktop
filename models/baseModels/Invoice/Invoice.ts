@@ -296,9 +296,12 @@ export abstract class Invoice extends Transactional {
       lpAddedBaseGrandTotal = await this.getLPAddedBaseGrandTotal();
     }
 
-    // update outstanding amounts
+    // update outstanding amounts (include meta — partial db.update must not strand modified)
+    this._updateModifiedMetaValues();
     await this.fyo.db.update(this.schemaName, {
       name: this.name as string,
+      modified: this.modified,
+      modifiedBy: this.modifiedBy,
       outstandingAmount: lpAddedBaseGrandTotal! || this.baseGrandTotal!,
     });
 
