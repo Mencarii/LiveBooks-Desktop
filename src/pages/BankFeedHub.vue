@@ -71,6 +71,20 @@
                     : t`Connection broken — sign in again.`
                 "
               />
+              <p
+                v-if="bank.kind === 'plaid' && bank.ingestPaused"
+                class="
+                  mt-1
+                  text-xs
+                  font-normal
+                  text-amber-700
+                  dark:text-amber-300
+                "
+              >
+                {{
+                  t`Bank feeds paused — open Desktop and acknowledge old import batches to resume.`
+                }}
+              </p>
               <span
                 v-if="bank.kind === 'plaid' && bank.pendingAtBank > 0"
                 class="
@@ -190,12 +204,12 @@ import {
   LIVEBOOKS_CLOUD_SESSION_APP_REFRESH_EVENT,
   openLivebooksCloudAccountSecurity,
 } from 'src/utils/livebooksCloud';
-import { promptTotpCode } from 'src/utils/promptTotpCode';
 import { ensureLivebooksCloudBookId } from 'src/utils/livebooksCloudBook';
 import {
-  exchangePlaidPublicToken,
-  requestPlaidLinkToken,
+  exchangePlaidPublicTokenWithStepUp,
+  requestPlaidLinkTokenWithStepUp,
 } from 'src/utils/plaidLinkApi';
+import { promptPlaidMfaTotp } from 'src/utils/plaidBankFeedsApi';
 import { openPlaidLinkModal } from 'src/utils/plaidLinkClient';
 import {
   feedItemById,
@@ -264,6 +278,7 @@ type BankTable = {
   loginRequired: boolean;
   pendingAtBank: number;
   health: 'ok' | 'stale' | 'broken' | null;
+  ingestPaused: boolean;
   rows: BankTableRow[];
   kind: 'plaid' | 'manual';
 };
@@ -384,6 +399,7 @@ export default defineComponent({
           loginRequired: it.item_login_required === true,
           pendingAtBank: it.last_pending_dropped_count ?? 0,
           health: it.health ?? null,
+          ingestPaused: !!it.ingest_paused_at,
           rows,
           kind: 'plaid',
         });
@@ -413,6 +429,7 @@ export default defineComponent({
           loginRequired: false,
           pendingAtBank: 0,
           health: null,
+          ingestPaused: false,
           rows: manualRows,
           kind: 'manual',
         });
@@ -523,45 +540,15 @@ export default defineComponent({
         `/bank-feeds/activity/${encodeURIComponent(accountName)}`
       );
     },
-    async promptPlaidTotp(): Promise<string | null> {
-      return await promptTotpCode({
-        title: t`Authenticator code`,
-        detail: t`Enter your LiveBooks Cloud authenticator or backup code to link a bank account.`,
-      });
-    },
-    async requestLinkTokenWithStepUp(
-      bookId: string,
-      itemId?: string
-    ): Promise<{ linkToken?: string; error?: string; totpCode?: string }> {
-      let totpCode: string | undefined;
-      let res = await requestPlaidLinkToken(
-        bookId,
-        itemId ? { itemId } : undefined
+    plaidLinkPromptTotp() {
+      return promptPlaidMfaTotp(
+        t`Enter your LiveBooks Cloud authenticator or backup code to link a bank account.`
       );
-      if (res.mfaNotConfigured) {
-        showToast({
-          type: 'warning',
-          message: t`Set up two-factor authentication on LiveBooks Cloud before linking a bank.`,
-          duration: 'long',
-        });
-        openLivebooksCloudAccountSecurity();
-        return { error: res.error };
-      }
-      if (res.needsTotp) {
-        const code = await this.promptPlaidTotp();
-        if (!code) {
-          return { error: t`Authenticator code required.` };
-        }
-        totpCode = code;
-        res = await requestPlaidLinkToken(bookId, {
-          ...(itemId ? { itemId } : {}),
-          totpCode,
-        });
-      }
-      if (res.error || !res.linkToken) {
-        return { error: res.error ?? t`Could not start Plaid Link.` };
-      }
-      return { linkToken: res.linkToken, totpCode };
+    },
+    promptPlaidTotp() {
+      return promptPlaidMfaTotp(
+        t`Enter your LiveBooks Cloud authenticator or backup code to view bank feed status.`
+      );
     },
     async linkBankWithPlaid(itemId?: string) {
       if (!this.bookId) {
@@ -577,11 +564,20 @@ export default defineComponent({
       const bookId = this.bookId;
       this.plaidLinkBusy = true;
       try {
-        const { linkToken, error: tokenErr, totpCode } =
-          await this.requestLinkTokenWithStepUp(
-            bookId,
-            itemId
-          );
+        const { linkToken, error: tokenErr, totpCode, mfaNotConfigured } =
+          await requestPlaidLinkTokenWithStepUp(bookId, {
+            itemId,
+            promptTotp: () => this.plaidLinkPromptTotp(),
+          });
+        if (mfaNotConfigured) {
+          showToast({
+            type: 'warning',
+            message: t`Set up two-factor authentication on LiveBooks Cloud before linking a bank.`,
+            duration: 'long',
+          });
+          openLivebooksCloudAccountSecurity();
+          return;
+        }
         if (tokenErr || !linkToken) {
           showToast({
             type: 'error',
@@ -593,28 +589,19 @@ export default defineComponent({
         const outcome = await openPlaidLinkModal({
           linkToken,
           onSuccess: async (publicToken) => {
-            let ex = await exchangePlaidPublicToken(
+            const ex = await exchangePlaidPublicTokenWithStepUp(
               bookId,
               publicToken,
-              plaidTotp
+              {
+                totpCode: plaidTotp,
+                promptTotp: () => this.plaidLinkPromptTotp(),
+              }
             );
             if (ex.mfaNotConfigured) {
               openLivebooksCloudAccountSecurity();
               throw new Error(
                 ex.error ??
                   t`Set up two-factor authentication on LiveBooks Cloud first.`
-              );
-            }
-            if (ex.needsTotp) {
-              const code = await this.promptPlaidTotp();
-              if (!code) {
-                throw new Error(t`Authenticator code required.`);
-              }
-              plaidTotp = code;
-              ex = await exchangePlaidPublicToken(
-                bookId,
-                publicToken,
-                plaidTotp
               );
             }
             if (!ex.ok) {
