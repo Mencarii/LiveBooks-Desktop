@@ -229,7 +229,7 @@ const ipc = {
   },
 
   /**
-   * Day-1 Phase 2.2 — main-process recovery loop. The renderer never
+   * main-process recovery loop. The renderer never
    * sees the recovered SQLCipher key. This call:
    *   1. POSTs to +/api/v1/me/escrow_key_retrieval+ (TOTP required).
    *   2. Persists the returned key into the OS keychain via
@@ -303,6 +303,19 @@ const ipc = {
         IPC_ACTIONS.DB_CALL,
         method,
         ...args
+      )) as BackendResponse;
+    },
+
+    async beginTransaction() {
+      return (await ipcRenderer.invoke(
+        IPC_ACTIONS.DB_BEGIN_TRANSACTION
+      )) as BackendResponse;
+    },
+
+    async endTransaction(commit = true) {
+      return (await ipcRenderer.invoke(
+        IPC_ACTIONS.DB_END_TRANSACTION,
+        commit
       )) as BackendResponse;
     },
 

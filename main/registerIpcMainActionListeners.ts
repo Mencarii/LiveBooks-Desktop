@@ -40,6 +40,7 @@ import databaseManager from '../backend/database/manager';
 import { emitMainProcessError } from '../backend/helpers';
 import { runDatabaseBootProbe } from '../backend/database/bootProbe';
 import type { BootProbeCodeWithDev } from '../backend/database/bootProbeTypes';
+import { verifyDatabaseOpensWithHexKey } from '../backend/database/cipherProfile';
 import { migratePlaintextToEncrypted } from '../backend/database/migration';
 import { Main } from '../main';
 import { DatabaseMethod } from '../utils/db/types';
@@ -74,7 +75,7 @@ type LivebooksCloudApiResult = {
 
 /**
  * Resolve the +accountKey+ owning the SQLCipher key for +dbPath+ on
- * +DB_CONNECT+. See plan §1.1 (resolution order).
+ * +DB_CONNECT+ (resolution order: cloud user id, then local namespace map).
  */
 function resolveAccountKeyForConnect(dbPath: string): string | null {
   const cloudUserId = getLivebooksCloudUserIdMain();
@@ -466,7 +467,7 @@ export default function registerIpcMainActionListeners(main: Main) {
           data: { error: 'invalid_path' as const },
         } as LivebooksCloudApiResult;
       }
-      // Day-1 Phase 1b.0 — escrow / MFA / recovery paths are main-process
+      // Escrow / MFA / recovery paths are main-process
       // only. The renderer must never carry raw SQLCipher keys, TOTP
       // codes, or recovery grants over the IPC boundary.
       if (isRendererDenylistedCloudPath(path)) {
@@ -610,7 +611,7 @@ export default function registerIpcMainActionListeners(main: Main) {
           throw buildKeychainUnavailableError();
         }
 
-        // Day-1 Phase 1.1 / 1.3 — DB_CREATE is the ONLY legitimate path that
+        // DB_CREATE is the ONLY legitimate path that
         // mints a fresh random key. We branch on cloud session:
         //   * Signed-in: store under +cloudUserId+ (sub of the access JWT).
         //   * Signed-out: allocate a fresh +local_{uuid}+ namespace per
@@ -684,7 +685,7 @@ export default function registerIpcMainActionListeners(main: Main) {
     IPC_ACTIONS.DB_CONNECT,
     async (_, dbPath: string, countryCode?: string) => {
       return await getErrorHandledReponse(async () => {
-        // Day-1 Phase 2.1 — linear boot probe (no probeAsPlaintext in
+        // linear boot probe (no probeAsPlaintext in
         // production; plaintext migration is dev-only inside bootProbe).
         const probe = await runDatabaseBootProbe(dbPath, {
           countryCode,
@@ -741,6 +742,18 @@ export default function registerIpcMainActionListeners(main: Main) {
     }
   );
 
+  ipcMain.handle(IPC_ACTIONS.DB_BEGIN_TRANSACTION, async () => {
+    return await getErrorHandledReponse(() => {
+      databaseManager.beginTransaction();
+    });
+  });
+
+  ipcMain.handle(IPC_ACTIONS.DB_END_TRANSACTION, async (_, commit = true) => {
+    return await getErrorHandledReponse(async () => {
+      await databaseManager.endTransaction(commit !== false);
+    });
+  });
+
   ipcMain.handle(
     IPC_ACTIONS.DB_BESPOKE,
     async (_, method: string, ...args: unknown[]) => {
@@ -757,7 +770,7 @@ export default function registerIpcMainActionListeners(main: Main) {
   });
 
   // ----------------------------------------------------------------------
-  // Day-1 Phase 2.3 — cloud key escrow (main process + Bearer only)
+  // cloud key escrow (main process + Bearer only)
   // ----------------------------------------------------------------------
 
   ipcMain.handle(
@@ -855,6 +868,28 @@ export default function registerIpcMainActionListeners(main: Main) {
         return { ok: false, error: 'not_signed_in' };
       }
 
+      if (!dbPath || !fs.existsSync(dbPath)) {
+        return {
+          ok: false,
+          error: 'db_not_found',
+          message: 'Company database file was not found on disk.',
+        };
+      }
+
+      if (!verifyDatabaseOpensWithHexKey(dbPath, hexKey)) {
+        const probeErr = new Error(
+          `Escrow push aborted: key from safeStorage does not open ${dbPath}`
+        );
+        emitMainProcessError(probeErr);
+        return {
+          ok: false,
+          error: 'escrow_key_probe_failed',
+          message:
+            'Your local encryption key could not open this company file. ' +
+            'Cloud backup was not updated. Restore from a local backup or contact support.',
+        };
+      }
+
       let res: import('node-fetch').Response;
       let data: unknown;
       try {
@@ -908,7 +943,7 @@ export default function registerIpcMainActionListeners(main: Main) {
   );
 
   // ----------------------------------------------------------------------
-  // Day-1 Phase 2.2 — RECOVERY_SUBMIT_AND_REKEY
+  // RECOVERY_SUBMIT_AND_REKEY
   //
   // Renderer hands us credentials. We do the cloud round-trip, persist the
   // returned key into the OS keychain under the right namespaced slot,
@@ -1065,7 +1100,7 @@ export default function registerIpcMainActionListeners(main: Main) {
 
       // Store via Buffer so we can wipe immediately. The String form is
       // unfortunately also held in +obj.encryption_key+; V8 may keep it
-      // alive — see plan §V8 caveat.
+      // alive; V8 may retain the original string from IPC JSON.parse.
       const keyBuffer = Buffer.from(recoveredKey, 'utf8');
       let stored = false;
       try {
@@ -1084,7 +1119,7 @@ export default function registerIpcMainActionListeners(main: Main) {
 
       // Verify by re-reading and reconnecting. If the key doesn't open
       // the encrypted .db (e.g. cloud holds a stale key) we surface
-      // +recovery_key_mismatch+ — the plan's Phase 2.4 state.
+      // Surface +recovery_key_mismatch+ when the recovered key cannot open the db.
       const persistedKey = getDatabaseKeyOnly(accountKey);
       if (!persistedKey) {
         return {

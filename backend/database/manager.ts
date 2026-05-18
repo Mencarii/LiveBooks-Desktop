@@ -14,6 +14,7 @@ import {
   probeDatabaseCipherMode,
 } from './cipherProfile';
 import DatabaseCore from './core';
+import { DbTransactionSession } from './dbTransactionSession';
 import { ensureTargetCipherProfile } from './migration';
 import {
   SCHEMA_MIGRATION_COMPLETE,
@@ -30,6 +31,7 @@ export class DatabaseManager extends DatabaseDemuxBase {
   db?: DatabaseCore;
   rawCustomFields: RawCustomField[] = [];
   encryptionKey?: string;
+  readonly #dbTransaction = new DbTransactionSession();
 
   get #isInitialized(): boolean {
     return this.db !== undefined && this.db.knex !== undefined;
@@ -232,6 +234,21 @@ export class DatabaseManager extends DatabaseDemuxBase {
     };
   }
 
+  beginTransaction(): void {
+    if (!this.db?.knex) {
+      throw new DatabaseError('Database not connected');
+    }
+    this.#dbTransaction.begin(this.db);
+  }
+
+  async endTransaction(commit = true): Promise<void> {
+    if (commit) {
+      await this.#dbTransaction.commit();
+    } else {
+      await this.#dbTransaction.rollback();
+    }
+  }
+
   async call(method: DatabaseMethod, ...args: unknown[]) {
     if (!this.#isInitialized) {
       return;
@@ -277,7 +294,7 @@ export class DatabaseManager extends DatabaseDemuxBase {
     return !query.length;
   }
 
-  /** Phase 3.0 — verified backup before UUID migration (also used by patch runner). */
+  /** verified backup before UUID migration (also used by patch runner). */
   async createVerifiedPreMigrationBackup(): Promise<string | null> {
     return await this.#createBackup();
   }
@@ -302,7 +319,7 @@ export class DatabaseManager extends DatabaseDemuxBase {
     await fs.ensureDir(path.dirname(backupPath));
     await this.#checkpointAndCopyDatabase(dbPath, backupPath);
 
-    // Day-1 Phase 1.7 — backup encryption invariant: a backup file MUST
+    // backup encryption invariant: a backup file MUST
     // open with the same encryption profile as the source. Use the full
     // cipher probe (not target-only) so copies taken while the writer is
     // open still verify when the on-disk profile matches the live connection.

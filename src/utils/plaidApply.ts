@@ -22,6 +22,7 @@
 
 import { fyo } from 'src/initFyo';
 import { setLastSuccessfulPlaidApplyAt } from 'src/utils/plaidApplyBookmark';
+import { runInDbTransaction } from 'src/utils/runInDbTransaction';
 import {
   ackImportBatch,
   fetchImportBatchPayload,
@@ -835,38 +836,40 @@ export async function applyPlaidBatchWithPayload(
     };
 
     try {
-      for (const [accountId, txs] of grouped.byAccount) {
-        const bankAccount = mapping.get(accountId)!;
-        const removed = grouped.removedByAccount.get(accountId) ?? [];
-        await applyOneAccount({
-          bankAccount,
-          publicId,
-          itemId,
-          txs,
-          removed,
-          expectedCurrency,
-          acc,
-        });
-      }
-      // Process removed rows for accounts that had no new txns this batch.
-      for (const [accountId, removed] of grouped.removedByAccount) {
-        if (grouped.byAccount.has(accountId)) {
-          continue;
+      // Local writes only — payload fetch and server ack stay outside the txn.
+      await runInDbTransaction(async () => {
+        for (const [accountId, txs] of grouped.byAccount) {
+          const bankAccount = mapping.get(accountId)!;
+          const removed = grouped.removedByAccount.get(accountId) ?? [];
+          await applyOneAccount({
+            bankAccount,
+            publicId,
+            itemId,
+            txs,
+            removed,
+            expectedCurrency,
+            acc,
+          });
         }
-        const bankAccount = mapping.get(accountId);
-        if (!bankAccount) {
-          continue;
+        for (const [accountId, removed] of grouped.removedByAccount) {
+          if (grouped.byAccount.has(accountId)) {
+            continue;
+          }
+          const bankAccount = mapping.get(accountId);
+          if (!bankAccount) {
+            continue;
+          }
+          await applyOneAccount({
+            bankAccount,
+            publicId,
+            itemId,
+            txs: [],
+            removed,
+            expectedCurrency,
+            acc,
+          });
         }
-        await applyOneAccount({
-          bankAccount,
-          publicId,
-          itemId,
-          txs: [],
-          removed,
-          expectedCurrency,
-          acc,
-        });
-      }
+      });
     } catch (e) {
       const message = (e as Error).message || 'Apply failed.';
       await reportPlaidApplyFailed(bookId, publicId, {
@@ -925,10 +928,9 @@ export async function applyPlaidBatchWithPayload(
     }
 
     await deleteApplyJournal(publicId).catch(() => undefined);
-    await setLastSuccessfulPlaidApplyAt(
-      fyo,
-      new Date().toISOString()
-    ).catch(() => undefined);
+    await setLastSuccessfulPlaidApplyAt(fyo, new Date().toISOString()).catch(
+      () => undefined
+    );
 
     return {
       ok: true,
