@@ -1,4 +1,7 @@
+import { t } from 'fyo';
 import { livebooksCloudRequest } from 'src/utils/livebooksCloud';
+import { promptPlaidMfaTotp } from 'src/utils/plaidBankFeedsApi';
+import type { PromptTotpFn } from 'src/utils/plaidBankFeedsApi';
 
 function messageFromCloudResponse(data: unknown, status: number): string {
   if (data && typeof data === 'object') {
@@ -12,6 +15,11 @@ function messageFromCloudResponse(data: unknown, status: number): string {
   }
   return `HTTP ${String(status)}`;
 }
+
+const defaultLinkPromptTotp: PromptTotpFn = async () =>
+  promptPlaidMfaTotp(
+    t`Enter your LiveBooks Cloud authenticator or backup code to link a bank account.`
+  );
 
 export async function requestPlaidLinkToken(
   bookId: string,
@@ -55,6 +63,44 @@ export async function requestPlaidLinkToken(
   return { linkToken };
 }
 
+export async function requestPlaidLinkTokenWithStepUp(
+  bookId: string,
+  options?: { itemId?: string; promptTotp?: PromptTotpFn }
+): Promise<{
+  linkToken?: string;
+  error?: string;
+  totpCode?: string;
+  mfaNotConfigured?: boolean;
+}> {
+  const prompt = options?.promptTotp ?? defaultLinkPromptTotp;
+  let totpCode: string | undefined;
+  let res = await requestPlaidLinkToken(
+    bookId,
+    options?.itemId ? { itemId: options.itemId } : undefined
+  );
+  if (res.mfaNotConfigured) {
+    return { error: res.error, mfaNotConfigured: true };
+  }
+  if (res.needsTotp) {
+    const code = await prompt();
+    if (!code) {
+      return { error: t`Authenticator code required.` };
+    }
+    totpCode = code;
+    res = await requestPlaidLinkToken(bookId, {
+      ...(options?.itemId ? { itemId: options.itemId } : {}),
+      totpCode,
+    });
+    if (res.mfaNotConfigured) {
+      return { error: res.error, mfaNotConfigured: true };
+    }
+  }
+  if (res.error || !res.linkToken) {
+    return { error: res.error ?? t`Could not start Plaid Link.` };
+  }
+  return { linkToken: res.linkToken, totpCode };
+}
+
 export async function exchangePlaidPublicToken(
   bookId: string,
   publicToken: string,
@@ -86,4 +132,30 @@ export async function exchangePlaidPublicToken(
     return { ok: false, error: err, needsTotp, mfaNotConfigured };
   }
   return { ok: true };
+}
+
+export async function exchangePlaidPublicTokenWithStepUp(
+  bookId: string,
+  publicToken: string,
+  options?: { totpCode?: string; promptTotp?: PromptTotpFn }
+): Promise<{
+  ok: boolean;
+  error?: string;
+  mfaNotConfigured?: boolean;
+}> {
+  const prompt = options?.promptTotp ?? defaultLinkPromptTotp;
+  let totpCode = options?.totpCode;
+  let ex = await exchangePlaidPublicToken(bookId, publicToken, totpCode);
+  if (ex.mfaNotConfigured) {
+    return ex;
+  }
+  if (ex.needsTotp) {
+    const code = await prompt();
+    if (!code) {
+      return { ok: false, error: t`Authenticator code required.` };
+    }
+    totpCode = code;
+    ex = await exchangePlaidPublicToken(bookId, publicToken, totpCode);
+  }
+  return ex;
 }
