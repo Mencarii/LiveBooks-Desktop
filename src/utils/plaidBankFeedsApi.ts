@@ -1,5 +1,7 @@
 import { t } from 'fyo';
 import { livebooksCloudRequest } from 'src/utils/livebooksCloud';
+import type { LivebooksCloudApiResult } from 'src/utils/livebooksCloud';
+import { setBankSyncMfaPaused } from 'src/utils/plaidBankSyncMfaGate';
 import { promptTotpCode } from 'src/utils/promptTotpCode';
 
 function cloudErrorCode(data: unknown): string | undefined {
@@ -78,23 +80,59 @@ export async function postMfaStepUp(
 
 let stepUpInFlight: Promise<boolean> | null = null;
 
-async function ensureMfaStepUp(promptTotp: PromptTotpFn): Promise<boolean> {
+/** `null` = silent pause (background poll); omit = default modal prompt. */
+export type MfaStepUpPrompt = PromptTotpFn | null | undefined;
+
+async function ensureMfaStepUp(promptTotp: MfaStepUpPrompt): Promise<boolean> {
   if (stepUpInFlight) {
     return stepUpInFlight;
   }
   stepUpInFlight = (async () => {
-    const code = await promptTotp();
+    if (promptTotp === null) {
+      setBankSyncMfaPaused(true);
+      return false;
+    }
+    const prompt = promptTotp ?? defaultPromptTotp;
+    const code = await prompt();
     if (!code) {
+      setBankSyncMfaPaused(true);
       return false;
     }
     const up = await postMfaStepUp(code);
-    return up.ok;
+    if (up.ok) {
+      setBankSyncMfaPaused(false);
+      return true;
+    }
+    setBankSyncMfaPaused(true);
+    return false;
   })();
   try {
     return await stepUpInFlight;
   } finally {
     stepUpInFlight = null;
   }
+}
+
+type CloudRequestOptions = Parameters<typeof livebooksCloudRequest>[0];
+
+/** Cloud API call with MFA step-up retry when the 30-minute window expired. */
+export async function livebooksCloudRequestWithStepUp(
+  options: CloudRequestOptions & { promptTotp?: MfaStepUpPrompt }
+): Promise<LivebooksCloudApiResult & { totpRequired?: boolean }> {
+  const { promptTotp: promptOverride, ...requestOptions } = options;
+  const promptTotp: MfaStepUpPrompt =
+    promptOverride === undefined ? defaultPromptTotp : promptOverride;
+  let res = await livebooksCloudRequest(requestOptions);
+  const code = cloudErrorCode(res.data);
+  if (!(res.status === 401 && code === 'totp_required')) {
+    return res;
+  }
+  const stepped = await ensureMfaStepUp(promptTotp);
+  if (!stepped) {
+    return { ...res, totpRequired: true };
+  }
+  res = await livebooksCloudRequest(requestOptions);
+  return res;
 }
 
 const defaultPromptTotp: PromptTotpFn = async () =>
@@ -151,7 +189,7 @@ export async function fetchPlaidFeeds(
 /** Fetches Plaid feed metadata; prompts once for MFA step-up when the 30-minute window expired. */
 export async function fetchPlaidFeedsWithStepUp(
   bookId: string,
-  options?: { ifNoneMatch?: string; promptTotp?: PromptTotpFn }
+  options?: { ifNoneMatch?: string; promptTotp?: MfaStepUpPrompt }
 ): Promise<{
   notModified: boolean;
   etag?: string;
@@ -178,8 +216,16 @@ export async function fetchPlaidFeedsWithStepUp(
 export async function fetchPendingImportBatches(
   bookId: string,
   itemId: string,
-  opts?: { plaidAccountId?: string; limit?: number }
-): Promise<{ batches: ImportBatchListRow[]; error?: string }> {
+  opts?: {
+    plaidAccountId?: string;
+    limit?: number;
+    promptTotp?: PromptTotpFn;
+  }
+): Promise<{
+  batches: ImportBatchListRow[];
+  error?: string;
+  totpRequired?: boolean;
+}> {
   const q = new URLSearchParams({
     item_id: itemId,
     delivery_status: 'pending',
@@ -190,10 +236,18 @@ export async function fetchPendingImportBatches(
   if (opts?.limit != null) {
     q.set('limit', String(opts.limit));
   }
-  const res = await livebooksCloudRequest({
+  const res = await livebooksCloudRequestWithStepUp({
     method: 'GET',
     path: `/api/v1/books/${bookId}/plaid/import_batches?${q.toString()}`,
+    promptTotp: opts?.promptTotp,
   });
+  if (res.totpRequired) {
+    return {
+      batches: [],
+      error: t`Authenticator code required.`,
+      totpRequired: true,
+    };
+  }
   if (!res.ok || !res.data || typeof res.data !== 'object') {
     const err =
       res.data &&
@@ -210,14 +264,29 @@ export async function fetchPendingImportBatches(
 
 export async function fetchImportBatchPayload(
   bookId: string,
-  publicId: string
-): Promise<{ payload: unknown; error?: string; status: number }> {
-  const res = await livebooksCloudRequest({
+  publicId: string,
+  opts?: { promptTotp?: PromptTotpFn }
+): Promise<{
+  payload: unknown;
+  error?: string;
+  status: number;
+  totpRequired?: boolean;
+}> {
+  const res = await livebooksCloudRequestWithStepUp({
     method: 'GET',
     path: `/api/v1/books/${bookId}/plaid/import_batches/${encodeURIComponent(
       publicId
     )}`,
+    promptTotp: opts?.promptTotp,
   });
+  if (res.totpRequired) {
+    return {
+      payload: null,
+      error: t`Authenticator code required.`,
+      status: 401,
+      totpRequired: true,
+    };
+  }
   if (!res.ok) {
     const err =
       res.data &&
@@ -242,19 +311,30 @@ export type BulkImportBatchPayloadRow = {
  */
 export async function bulkFetchImportBatchPayloads(
   bookId: string,
-  publicIds: string[]
+  publicIds: string[],
+  opts?: { promptTotp?: PromptTotpFn }
 ): Promise<{
   batches: BulkImportBatchPayloadRow[];
   error?: string;
   status: number;
+  totpRequired?: boolean;
 }> {
-  const res = await livebooksCloudRequest({
+  const res = await livebooksCloudRequestWithStepUp({
     method: 'POST',
     path: `/api/v1/books/${encodeURIComponent(
       bookId
     )}/plaid/import_batches/bulk_show`,
     body: { public_ids: publicIds },
+    promptTotp: opts?.promptTotp,
   });
+  if (res.totpRequired) {
+    return {
+      batches: [],
+      error: t`Authenticator code required.`,
+      status: 401,
+      totpRequired: true,
+    };
+  }
   if (!res.ok || !res.data || typeof res.data !== 'object') {
     const err =
       res.data &&

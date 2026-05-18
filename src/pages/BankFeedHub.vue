@@ -15,6 +15,8 @@
         {{ bookError }}
       </div>
 
+      <PlaidBankSyncMfaBanner @verified="onBankSyncMfaVerified" />
+
       <div
         v-if="accountsLoading || feedsLoading"
         class="text-sm text-gray-600 dark:text-gray-400"
@@ -221,6 +223,8 @@ import {
   formatPlaidAccountLabel as formatPlaidLinkedRowLabel,
   type PlaidLinkedAccountRow,
 } from 'src/utils/plaidLinkedAccountsApi';
+import PlaidBankSyncMfaBanner from 'src/components/PlaidBankSyncMfaBanner.vue';
+import { isBankSyncMfaPaused } from 'src/utils/plaidBankSyncMfaGate';
 import { routeTo } from 'src/utils/ui';
 import { isCredit } from 'models/helpers';
 import { AccountTypeEnum } from 'models/baseModels/Account/types';
@@ -266,7 +270,7 @@ type BankTable = {
 
 export default defineComponent({
   name: 'BankFeedHub',
-  components: { PageHeader, Button },
+  components: { PageHeader, Button, PlaidBankSyncMfaBanner },
   data() {
     return {
       bookId: '' as string,
@@ -892,11 +896,14 @@ export default defineComponent({
     schedulePoll() {
       this.clearPoll();
       this.pollTimer = setTimeout(() => {
-        if (!document.hidden) {
+        if (!document.hidden && !isBankSyncMfaPaused()) {
           void this.refreshFeeds(true);
         }
         this.schedulePoll();
       }, this.pollIntervalMs);
+    },
+    onBankSyncMfaVerified() {
+      void this.refreshFeeds(false);
     },
     async bootstrapFeeds() {
       const ctx = await ensureLivebooksCloudBookId(fyo);
@@ -925,7 +932,8 @@ export default defineComponent({
       this.feedsError = '';
       const res = await fetchPlaidFeedsWithStepUp(this.bookId, {
         ifNoneMatch: useEtag ? this.feedsEtag : undefined,
-        promptTotp: () => this.promptPlaidTotp(),
+        // Background polls pause and show PlaidBankSyncMfaBanner instead of a modal.
+        promptTotp: useEtag ? null : () => this.promptPlaidTotp(),
       });
       this.feedsLoading = false;
       if (res.error) {
@@ -1005,7 +1013,7 @@ export default defineComponent({
       const { batches, error } = await fetchPendingImportBatches(
         this.bookId,
         itemId,
-        { limit: 20 }
+        { limit: 20, promptTotp: () => this.promptPlaidTotp() }
       );
       this.batchListLoading = false;
       if (error) {
@@ -1029,7 +1037,8 @@ export default defineComponent({
       };
       const { payload, error } = await fetchImportBatchPayload(
         this.bookId,
-        publicId
+        publicId,
+        { promptTotp: () => this.promptPlaidTotp() }
       );
       if (error || !payload || typeof payload !== 'object') {
         this.previewByBatch = {
