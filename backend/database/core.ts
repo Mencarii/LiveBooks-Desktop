@@ -142,29 +142,38 @@ export default class DatabaseCore extends DatabaseBase {
 
     await config.pre?.();
 
-    // One transaction per migrate pass where SQLite allows DDL in a txn.
-    // File backup in DatabaseManager remains the recovery path on power loss.
-    await this.knex!.transaction(async (trx) => {
-      const priorKnex = this.knex;
-      this.knex = trx as Knex;
-      try {
-        for (const schemaName of create) {
-          await this.#createTable(schemaName);
-        }
+    // Disable FK enforcement so that intermediate DROP TABLE (used by SQLite
+    // to implement DROP COLUMN) doesn't fail when other tables reference the
+    // target. Must be set outside the transaction per SQLite semantics.
+    await this.knex!.raw('PRAGMA foreign_keys=OFF');
 
-        for (const alterConfig of alter) {
-          await this.#alterTable(alterConfig);
-        }
+    try {
+      // One transaction per migrate pass where SQLite allows DDL in a txn.
+      // File backup in DatabaseManager remains the recovery path on power loss.
+      await this.knex!.transaction(async (trx) => {
+        const priorKnex = this.knex;
+        this.knex = trx as Knex;
+        try {
+          for (const schemaName of create) {
+            await this.#createTable(schemaName);
+          }
 
-        if (!hasSingleValueTable) {
-          singlesConfig = await this.#getSinglesUpdateList();
-        }
+          for (const alterConfig of alter) {
+            await this.#alterTable(alterConfig);
+          }
 
-        await this.#initializeSingles(singlesConfig);
-      } finally {
-        this.knex = priorKnex;
-      }
-    });
+          if (!hasSingleValueTable) {
+            singlesConfig = await this.#getSinglesUpdateList();
+          }
+
+          await this.#initializeSingles(singlesConfig);
+        } finally {
+          this.knex = priorKnex;
+        }
+      });
+    } finally {
+      await this.knex!.raw('PRAGMA foreign_keys=ON');
+    }
 
     await config.post?.();
   }
